@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -35,6 +36,7 @@ char* ipMemoria;
 char* puertoMemoria;
 int cantidadHilos;
 int retardo;
+int socketPlanificador;
 
 void configurarCPU(char* config);
 int configurarSocketCliente(int s, char* ip, char* puerto);
@@ -51,8 +53,14 @@ int main(int argc, char** argv) {
 
 	//TODO Leer archivo de configuracion y extraer variables
 		configurarCPU(argv[1]);
-
-
+		if(configurarSocketCliente(socketPlanificador, ipMemoria, puertoMemoria))
+			log_info(archivoLog, "Conecté al planificador.\n");
+		else
+			log_error(archivoLog, "Error al conectar en el planificador.\n");
+		if(send(socketPlanificador, "holas", 5, MSG_CONFIRM)==-1)
+			log_error(archivoLog, "Error en el send.\n");
+		else
+			log_info(archivoLog,"Mandé a planificador.\n");
 
 
 
@@ -80,32 +88,18 @@ void configurarCPU (char* config){
 	config_destroy(configCPU);
 }
 
-
-
-
-
-
-
-
-
-
 int configurarSocketCliente(int s, char* ip, char* puerto){
-	int status;
-	struct addrinfo hints, *serverInfo;
+	struct sockaddr_in direccionServidor;
+	direccionServidor.sin_family = AF_INET;
+	direccionServidor.sin_addr.s_addr = inet_addr(ip);
+	direccionServidor.sin_port = htons(4000);
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;     	//Setea el tipo de IP
-	hints.ai_socktype = SOCK_STREAM; 	// TCP stream sockets
-
-	if((status = getaddrinfo(ip, puerto, &hints, &serverInfo)) == -1){
+	s = socket(AF_INET, SOCK_STREAM, 0);
+	if (connect(s, (void*)&direccionServidor, sizeof(direccionServidor)) != 0){
+		log_error(archivoLog, "No se pudo conectar");
 		return 0;
 	}
 
-	s = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
-	if((connect(s, serverInfo->ai_addr, serverInfo->ai_addrlen)) == -1){
-		return 0;
-	}
 
-	freeaddrinfo(serverInfo);
 	return 1;
 }
