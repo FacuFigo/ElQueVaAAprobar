@@ -37,10 +37,18 @@ char* puertoEscucha;
 char* algoritmo;
 int quantum;
 int listeningSocket;
+int clienteCPU;
 
+//Tipos de comandos
+typedef enum {
+	CORRER, FINALIZAR, PS, CPU
+} comando_t;
+
+//Funciones de configuracion
 void configurarPlanificador(char* config);
 int configurarSocketServidor();
-//int manejoDeConsola();
+//Funciones de gestion
+void manejoDeConsola();
 
 int main(int argc, char** argv) {
 
@@ -55,24 +63,33 @@ int main(int argc, char** argv) {
 //TODO Leer archivo de configuracion y extraer variables
 	configurarPlanificador(argv[1]);
 
+//Creacion de servidor
 //TODO Preguntar si se termina el programa o hay que reintentar.
-	if (configurarSocketServidor())
-		log_info(archivoLog, "Servidor creado.\n");
-	else
-		log_error(archivoLog, "No se pudo crear el Servidor.\n");
+	configurarSocketServidor();
+	/*	if (configurarSocketServidor())
+	 log_info(archivoLog, "Servidor creado.\n");
+	 else
+	 log_error(archivoLog, "No se pudo crear el Servidor.\n");
+	 */
 
-	char* prueba = "\0";
-
-	for(;;){
+//Prueba para testeo de sockets -SACAR-
+	char* prueba = malloc(5);
+	for (;;) {
 		recv(listeningSocket, prueba, sizeof(5), 0);
 	}
 
-//TODO Esperar la conexion de CPUs
-
+//TODO Esperar la conexion de CPUs -minimo 2-
+//Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes
+	struct sockaddr_in direccionCliente;
+	unsigned int len;
+	int cantidadCPUs;
+	while(cantidadCPUs < 2){
+		clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
+		log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
+	}
 //TODO Levantar la consola
-	//pthread_t hiloConsola;
-
-	//pthreadCreate(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
+	pthread_t hiloConsola;
+	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
 	return 0;
 
@@ -99,31 +116,59 @@ int configurarSocketServidor() {
 	direccionServidor.sin_addr.s_addr = INADDR_ANY;
 	direccionServidor.sin_port = htons((int) puertoEscucha);
 
-	int servidor = socket(AF_INET, SOCK_STREAM, 0);
+	listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
 
 	int activado = 1;
-	setsockopt(servidor, SOL_SOCKET, SO_REUSEADDR, &activado, sizeof(activado));
+	setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &activado,
+			sizeof(activado));
 
-	if (bind(servidor, (void*) &direccionServidor, sizeof(direccionServidor)) != 0){
+	if (bind(listeningSocket, (void*) &direccionServidor,
+			sizeof(direccionServidor)) != 0) {
 		log_error(archivoLog, "Falló el bind");
 		return 1;
 	}
 
-	listen(servidor, (int) puertoEscucha);
+	listen(listeningSocket, (int) puertoEscucha);
 
-	struct sockaddr_in direccionCliente;
-	unsigned int len;
-	listeningSocket = accept(servidor, (void*) &direccionCliente, &len);
+	log_info(archivoLog, "Servidor creado.\n");
 
 	return 1;
 }
 
-/*int manejoDeConsola(){
- char* comando;
+void manejoDeConsola() {
+//TODO Cambiar el tamaño de comando
+	char* directiva = malloc(100);
+	comando_t comando;
 
- gets(comando);
- string_starts_with(comando,"correr");
+	for (;;) {
+		scanf("%s", directiva);
 
- return 0;
- }
- */
+		if (string_starts_with(directiva, "correr") || string_starts_with(directiva, "finalizar")){
+			char** directivaSplit = string_n_split(directiva, 2, " ");
+			string_capitalized(directivaSplit[1]);
+			comando = (comando_t) directivaSplit[1];
+			switch (comando){
+			//Correr
+			case 0:
+				break;
+			//Finalizar
+			case 1:
+				break;
+			}
+		} else {
+			string_capitalized(directiva);
+			comando = (comando_t) directiva;
+			switch (comando){
+			//PS
+			case 2:
+				break;
+			//CPU
+			case 3:
+				break;
+			}
+
+		}
+
+	}
+}
+
