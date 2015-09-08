@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : planificador.c
- Author      : 
+ Author      :
  Version     :
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
@@ -33,7 +33,7 @@
 #define BACKLOG 5
 
 t_log* archivoLog;
-char* puertoEscucha;
+int puertoEscucha;
 char* algoritmo;
 int quantum;
 int listeningSocket;
@@ -73,15 +73,19 @@ int main(int argc, char** argv) {
 	 */
 
 //Prueba para testeo de sockets -SACAR-
-	char* prueba = malloc(5);
-	for (;;) {
-		recv(listeningSocket, prueba, sizeof(5), 0);
-	}
+	//struct sockaddr_in direccionCliente;
+	struct sockaddr_storage direccionCliente;
+	unsigned int len = sizeof(direccionCliente);
+	char* prueba = malloc(10);
+	clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
+	log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
+	int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
+	log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
 
 //TODO Esperar la conexion de CPUs -minimo 2-
 //Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes
-	struct sockaddr_in direccionCliente;
-	unsigned int len;
+	///struct sockaddr_in direccionCliente;
+	//unsigned int len;
 	int cantidadCPUs;
 	while(cantidadCPUs < 2){
 		clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
@@ -99,7 +103,7 @@ void configurarPlanificador(char* config) {
 
 	t_config* configPlanificador = config_create(config);
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_string_value(configPlanificador,
+		puertoEscucha = config_get_int_value(configPlanificador,
 				"PUERTO_ESCUCHA");
 	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICADOR"))
 		algoritmo = config_get_string_value(configPlanificador,
@@ -114,7 +118,7 @@ int configurarSocketServidor() {
 	struct sockaddr_in direccionServidor;
 	direccionServidor.sin_family = AF_INET;
 	direccionServidor.sin_addr.s_addr = INADDR_ANY;
-	direccionServidor.sin_port = htons((int) puertoEscucha);
+	direccionServidor.sin_port = htons(puertoEscucha);
 
 	listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -128,9 +132,10 @@ int configurarSocketServidor() {
 		return 1;
 	}
 
-	listen(listeningSocket, (int) puertoEscucha);
+	listen(listeningSocket, BACKLOG);
 
-	log_info(archivoLog, "Servidor creado.\n");
+
+	log_info(archivoLog, "Servidor creado. %i\n", listeningSocket);
 
 	return 1;
 }
