@@ -59,6 +59,20 @@ int main(int argc, char** argv) {
 	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmMemoria(argv[1]);
 
+	if (configurarSocketCliente(ipSwap, puertoSwap,
+				&socketSwap))
+			log_info(archivoLog, "Conecté al Swap %i.\n",
+					socketSwap);
+	else
+			log_error(archivoLog, "Error al conectar en el Swap. %s\n",
+					ipSwap);
+		char* msg = "hola";
+		int tam = strlen(msg);
+	if (send(socketSwap, msg, tam, 0) == -1)
+			log_error(archivoLog, "Error en el send.\n");
+	else
+			log_info(archivoLog, "Mandé a Swap.\n");
+
 	return 0;
 }
 

@@ -54,9 +54,13 @@ int main(int argc, char** argv) {
 
 		//TODO Leer archivo de configuracion y extraer variables
 			configurarAdmSwap(argv[1]);
-
-
-
+		if (configurarSocketServidor(ipAdmMemoria, puertoAdmMemoria,
+						&socketAdmMemoria))
+					log_info(archivoLog, "Se me conectó el Admin de memoria %i.\n",
+							socketPlanificador);
+		else
+					log_error(archivoLog, "Error al conectarseme en el Admin de memoria. %s\n",
+							ipAdmMemoria);
 
 
 		return 0;
@@ -66,14 +70,14 @@ int main(int argc, char** argv) {
 void configurarAdmSwap(char* config) {
 	t_config* configurarAdmSwap = config_create(config);
 	if (config_has_property(configurarAdmSwap, "NOMBRE_SWAP"))
-		nombreSwap = config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP");
+		nombreSwap = string_duplicate(config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP"));
 	if (config_has_property(configurarAdmSwap, "PUERTO_ESCUCHA"))
 		puertoEscucha = config_get_string_value(configurarAdmSwap,
 				"PUERTO_ESCUCHA");
 	if (config_has_property(configurarAdmSwap, "IP_MEMORIA"))
-		ipAdmMemoria = config_get_string_value(configurarAdmSwap, "IP_MEMORIA");
+		ipAdmMemoria = string_duplicate(config_get_string_value(configurarAdmSwap, "IP_MEMORIA"));
 	if (config_has_property(configurarAdmSwap, "PUERTO_MEMORIA"))
-		puertoAdmMemoria = config_get_string_value(configurarAdmSwap, "PUERTO_MEMORIA");
+		puertoAdmMemoria = string_duplicate(config_get_string_value(configurarAdmSwap, "PUERTO_MEMORIA"));
 	if (config_has_property(configurarAdmSwap, "CANTIDAD_PAGINAS"))
 		cantidadPaginas = config_get_int_value(configurarAdmSwap,
 				"CANTIDAD_PAGINAS");
