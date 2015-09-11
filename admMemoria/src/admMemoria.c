@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -32,19 +33,21 @@
 #define BACKLOG 5
 
 t_log* archivoLog;
-char* puertoEscucha;
+int puertoEscucha;
 char* ipSwap;
-char* puertoSwap;
+int puertoSwap;
 int maximoMarcosPorProceso;
 int cantidadMarcos;
+int listeningSocket;
 int tamanioMarco;
 int entradasTLB;
 char* TLBHabilitada;
 int retardoMemoria;
+int socketSwap;
 
 void configurarAdmMemoria(char* config);
-int configurarSocketCliente(int s, char* ip, char* puerto);
-int configurarSocketServidor(int listeningSocket);
+int configurarSocketCliente(char* ip, int puerto, int*);
+int configurarSocketServidor();
 
 
 int main(int argc, char** argv) {
@@ -52,12 +55,21 @@ int main(int argc, char** argv) {
 	archivoLog = log_create("log_AdmMemoria", "AdmMemoria", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
 	//Chequeo de argumentos
+
 	if (argc < 1) {
 		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
 	}
 
 	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmMemoria(argv[1]);
+
+	if (configurarSocketCliente(ipSwap, puertoSwap,
+				&socketSwap))
+		log_info(archivoLog, "Conecté al admin de swap %i.\n",
+					socketSwap);
+	else
+		log_error(archivoLog, "Error al conectar en el admin de swap. %s\n",
+					ipSwap);
 
 	return 0;
 }
@@ -66,12 +78,12 @@ void configurarAdmMemoria(char* config) {
 
 	t_config* configurarAdmMemoria = config_create(config);
 	if (config_has_property(configurarAdmMemoria, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_string_value(configurarAdmMemoria,
+		puertoEscucha = config_get_int_value(configurarAdmMemoria,
 				"PUERTO_ESCUCHA");
 	if (config_has_property(configurarAdmMemoria, "IP_SWAP"))
 		ipSwap = config_get_string_value(configurarAdmMemoria, "IP_SWAP");
 	if (config_has_property(configurarAdmMemoria, "PUERTO_SWAP"))
-		puertoSwap = config_get_string_value(configurarAdmMemoria, "PUERTO_SWAP");
+		puertoSwap = config_get_int_value(configurarAdmMemoria, "PUERTO_SWAP");
 	if (config_has_property(configurarAdmMemoria, "MAXIMO_MARCOS_POR_PROCESO"))
 		maximoMarcosPorProceso = config_get_int_value(configurarAdmMemoria,
 				"MAXIMO_MARCOS_POR_PROCESO");
@@ -94,63 +106,47 @@ void configurarAdmMemoria(char* config) {
 }
 
 
-int configurarSocketCliente(int s, char* ip, char* puerto){
-	int status;
-	struct addrinfo hints, *serverInfo;
+int configurarSocketCliente(char* ip, int puerto, int* s) {
+	struct sockaddr_in direccionServidor;
+	direccionServidor.sin_family = AF_INET;
+	direccionServidor.sin_addr.s_addr = inet_addr(ip);
+	direccionServidor.sin_port = htons(puerto);
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;     	//Setea el tipo de IP
-	hints.ai_socktype = SOCK_STREAM; 	// TCP stream sockets
-
-	if((status = getaddrinfo(ip, puerto, &hints, &serverInfo)) == -1){
+	*s = socket(AF_INET, SOCK_STREAM, 0);
+	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))
+			== -1) {
+		log_error(archivoLog, "No se pudo conectar");
 		return 0;
 	}
 
-	s = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
-	if((connect(s, serverInfo->ai_addr, serverInfo->ai_addrlen)) == -1){
-		return 0;
-	}
-
-	freeaddrinfo(serverInfo);
 	return 1;
 }
 
-int configurarSocketServidor(int listeningSocket){
-	int status;
-	int yes = 1;
-	struct addrinfo hints, *serverInfo, *p;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+int configurarSocketServidor() {
 
-	if((status = getaddrinfo(NULL, puertoEscucha, &hints, &serverInfo)) == -1) {
-	   return 0;
-	}
-	for(p = serverInfo; p != NULL; p = p->ai_next) {
-	if((listeningSocket = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol)) == -1){
-		return 0;
-	}
-	//fcntl(listeningSocket, F_SETFD, O_NONBLOCK);
-	//No estoy seguro de esta funcion
-	if (setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-	    return 0;
-	}
-	if((bind(listeningSocket, serverInfo->ai_addr, serverInfo->ai_addrlen)) == -1){
-		return 0;
-	}
-	break;
+	struct sockaddr_in direccionServidor;
+	direccionServidor.sin_family = AF_INET;
+	direccionServidor.sin_addr.s_addr = INADDR_ANY;
+	direccionServidor.sin_port = htons(puertoEscucha);
+
+	listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+	int activado = 1;
+	setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &activado,
+			sizeof(activado));
+
+	if (bind(listeningSocket, (void*) &direccionServidor,
+			sizeof(direccionServidor)) != 0) {
+		log_error(archivoLog, "Falló el bind");
+		return 1;
 	}
 
-    if (p == NULL)  {
-       	fprintf(stderr, "server: failed to bind\n");
-    }
+	listen(listeningSocket, BACKLOG);
 
-	freeaddrinfo(serverInfo);
 
-	if ((listen(listeningSocket, BACKLOG)) == -1){
-			log_error(archivoLog, "Error en el listen");
-	}
+	log_info(archivoLog, "Servidor creado. %i\n", listeningSocket);
+
 	return 1;
 }
+

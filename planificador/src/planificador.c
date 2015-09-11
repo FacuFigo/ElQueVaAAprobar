@@ -40,8 +40,10 @@ int listeningSocket;
 int clienteCPU;
 
 //Tipos de comandos
-typedef enum {
-	CORRER, FINALIZAR, PS, CPU
+typedef struct{
+	char* comandoCompleto;
+	char* comando;
+	char* parametro;
 } comando_t;
 
 typedef struct _t_Package {
@@ -57,6 +59,9 @@ void manejoDeConsola();
 //Funciones de sockets
 char* serializarOperandos(t_Package *package);
 void fill_package(t_Package *package);
+//Funciones de comandos
+void correrPath();
+void finalizarCPU();
 
 int main(int argc, char** argv) {
 
@@ -74,13 +79,8 @@ int main(int argc, char** argv) {
 //Creacion de servidor
 //TODO Preguntar si se termina el programa o hay que reintentar.
 	configurarSocketServidor();
-	/*	if (configurarSocketServidor())
-	 log_info(archivoLog, "Servidor creado.\n");
-	 else
-	 log_error(archivoLog, "No se pudo crear el Servidor.\n");
-	 */
 
-//Prueba para testeo de sockets -SACAR-
+//Prueba para testeo de sockets con serializacion -SACAR-
 	//struct sockaddr_in direccionCliente;
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
@@ -114,9 +114,32 @@ int main(int argc, char** argv) {
 		clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 		log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 	}
+
+//TODO Esperar la conexion de CPUs
+//Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes - PREGUNTAR
+	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
+	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
+
+/* PARA CHECKPOINT - PROBAR -
+	char* directiva = "\0";
+	scanf("%s", directiva);
+	char** directivaSplit = string_n_split(directiva, 2, " ");
+	int* tamanio = malloc(sizeof(directivaSplit[2]));
+	char* buffer = malloc(len);
+	buffer = directivaSplit[2];
+	send(clienteCPU, buffer, *tamanio, 0);
+	free(buffer);
+	free(tamanio);
+	
+	char* notificacion = malloc(15);
+	recv(clienteCPU, notificacion, 15, 0);
+	log_info(archivoLog, "%s", notificacion);
+	free(notificacion);
+*/
+
 //TODO Levantar la consola
-	pthread_t hiloConsola;
-	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
+//	pthread_t hiloConsola;
+//	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
 	return 0;
 
@@ -126,11 +149,9 @@ void configurarPlanificador(char* config) {
 
 	t_config* configPlanificador = config_create(config);
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_int_value(configPlanificador,
-				"PUERTO_ESCUCHA");
+		puertoEscucha = config_get_int_value(configPlanificador, "PUERTO_ESCUCHA");
 	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICADOR"))
-		algoritmo = config_get_string_value(configPlanificador,
-				"ALGORITMO_PLANIFICADOR");
+		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICADOR"));
 	if (config_has_property(configPlanificador, "QUANTUM"))
 		quantum = config_get_int_value(configPlanificador, "QUANTUM");
 	config_destroy(configPlanificador);
@@ -163,42 +184,39 @@ int configurarSocketServidor() {
 	return 1;
 }
 
+
 void manejoDeConsola() {
-//TODO Cambiar el tamaño de comando
-	char* directiva = malloc(100);
+
 	comando_t comando;
 
-	for (;;) {
-		scanf("%s", directiva);
+	int mantenerConsola = 1;
 
-		if (string_starts_with(directiva, "correr") || string_starts_with(directiva, "finalizar")){
-			char** directivaSplit = string_n_split(directiva, 2, " ");
-			string_capitalized(directivaSplit[1]);
-			comando = (comando_t) directivaSplit[1];
-			switch (comando){
-			//Correr
-			case 0:
-				break;
-			//Finalizar
-			case 1:
-				break;
-			}
-		} else {
-			string_capitalized(directiva);
-			comando = (comando_t) directiva;
-			switch (comando){
-			//PS
-			case 2:
-				break;
-			//CPU
-			case 3:
-				break;
-			}
+	while (mantenerConsola) {
 
+		scanf("%s", comando.comandoCompleto);
+
+		if((string_starts_with(comando.comandoCompleto, "correr")) || (string_starts_with(comando.comandoCompleto, "finalizar"))){
+		
+			char** comandoSplits = malloc(2 * sizeof(comando.comandoCompleto));
+
+			comandoSplits = string_n_split(comando.comandoCompleto, 2, " ");
+			comando.comando = comandoSplits[1];
+			comando.parametro = comandoSplits[2];
+			
+			free(comandoSplits);
+			
+			if (comando.comando == "correr")
+				correrPath(comando.parametro);
+			//else
+				//finalizarPID(comando.parametro);
+		}else{
+			
+			//PS CPU
+		
 		}
-
 	}
 }
+
 
 void fill_package(t_Package *package){
 	/* Me guardo los datos del usuario y el mensaje que manda */
@@ -221,3 +239,22 @@ char* serializarOperandos(t_Package *package){
 	return serializedPackage;
 }
 
+void correrPath(char* path){
+
+//TODO Definir estructura del PCB y datos del mismo
+	//pcb = generarPCB();
+	send(clienteCPU, path, sizeof(path), 0);
+
+}
+
+void finalizarCPU(char* pid){
+
+
+
+}
+
+//Devolvera la estructura completa
+void generarPCB(){
+
+
+}
