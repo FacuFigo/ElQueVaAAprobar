@@ -37,9 +37,16 @@ int puertoMemoria;
 int cantidadHilos;
 int retardo;
 int socketPlanificador;
+int socketMemoria;
+
+typedef struct _t_Package {
+	char message[100];
+	uint32_t message_long;
+} t_Package;
 
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
+int recieve_and_deserialize(t_Package *package, int socketCliente);
 
 int main(int argc, char** argv) {
 
@@ -51,21 +58,36 @@ int main(int argc, char** argv) {
 		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
 	}
 
-	//TODO Leer archivo de configuracion y extraer variables
 	configurarCPU(argv[1]);
+	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 			&socketPlanificador))
-		log_info(archivoLog, "Conecté al planificador %i.\n",
+		log_info(archivoLog, "Conecté con el planificador %i.\n",
 				socketPlanificador);
 	else
-		log_error(archivoLog, "Error al conectar en el planificador. %s\n",
+		log_error(archivoLog, "Error al conectar con el planificador. %s\n",
 				ipPlanificador);
-	char* msg = "hola";
-	int tam = strlen(msg);
-	if (send(socketPlanificador, msg, tam, 0) == -1)
-		log_error(archivoLog, "Error en el send.\n");
+//	char* msg = "hola";
+//	int tam = strlen(msg);
+//	if (send(socketPlanificador, msg, tam, 0) == -1)
+//		log_error(archivoLog, "Error en el send.\n");
+//	else
+//		log_info(archivoLog, "Mandé \"%s\" a planificador.\n", msg);
+	t_Package package;
+	int status = recieve_and_deserialize(&package, socketPlanificador);
+	if (status)
+		log_info(archivoLog, "Planificador says: %s", package.message);
+	//conexion con el adm de mem
+	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
+		log_info(archivoLog, "Conecté con el administrador de memoria %i.\n",
+				socketMemoria);
 	else
-		log_info(archivoLog, "Mandé a planificador.\n");
+		log_error(archivoLog, "Error al conectar con la memoria. %s\n",
+				ipMemoria);
+//	if (send(socketMemoria, msg, tam, 0) == -1)
+//		log_error(archivoLog, "Error en el send.\n");
+//	else
+//		log_info(archivoLog, "Mandé \"%s\" a memoria.\n", msg);
 
 	return 0;
 
@@ -108,3 +130,22 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 
 	return 1;
 }
+
+int recieve_and_deserialize(t_Package *package, int socketCliente) {
+	int status;
+	int buffer_size;
+	char *buffer = malloc(buffer_size = sizeof(uint32_t));
+	uint32_t message_long;
+	status = recv(socketCliente, buffer, sizeof(package->message_long), 0);
+	memcpy(&(message_long), buffer, buffer_size);
+	log_info(archivoLog, "primer recv: %d", message_long);
+	if (!status)
+		return 0;
+	status = recv(socketCliente, package->message, message_long, 0);
+	log_info(archivoLog, "segundo recv: %s", package->message);
+	if (!status)
+		return 0;
+	free(buffer);
+	return status;
+}
+

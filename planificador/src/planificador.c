@@ -44,11 +44,19 @@ typedef enum {
 	CORRER, FINALIZAR, PS, CPU
 } comando_t;
 
+typedef struct _t_Package {
+char* message;
+uint32_t message_long;
+} t_Package;
+
 //Funciones de configuracion
 void configurarPlanificador(char* config);
 int configurarSocketServidor();
 //Funciones de gestion
 void manejoDeConsola();
+//Funciones de sockets
+char* serializarOperandos(t_Package *package);
+void fill_package(t_Package *package);
 
 int main(int argc, char** argv) {
 
@@ -76,12 +84,27 @@ int main(int argc, char** argv) {
 	//struct sockaddr_in direccionCliente;
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
-	char* prueba = malloc(10);
+	t_Package package;
+	package.message = malloc(100);
+	char *serializedPackage;
 	clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
-	int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
-	log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
 
+	puts("Escriba un texto para mandar");
+	scanf("%s",package.message);
+	getchar();
+	int size = strlen(package.message);
+	package.message_long=size+ 1;
+	serializedPackage = serializarOperandos(&package);
+
+	//int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
+	//log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
+	if (send(clienteCPU, serializedPackage, (sizeof(package.message_long)+package.message_long), 0) == -1)
+			log_error(archivoLog, "Error en el send.\n");
+	else
+			log_info(archivoLog, "Mandé \"%s\" a memoria.\n", package.message);
+	free(serializedPackage);
+	close(clienteCPU);
 //TODO Esperar la conexion de CPUs -minimo 2-
 //Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes
 	///struct sockaddr_in direccionCliente;
@@ -175,5 +198,26 @@ void manejoDeConsola() {
 		}
 
 	}
+}
+
+void fill_package(t_Package *package){
+	/* Me guardo los datos del usuario y el mensaje que manda */
+	scanf("%s",package->message);
+	getchar();
+	//(package->message)[strlen(package->message)] = '\0';
+	package->message_long = strlen(package->message)+1; // Me guardo lugar para el \0
+}
+
+char* serializarOperandos(t_Package *package){
+	int total = sizeof(package->message_long) + package->message_long;
+	char *serializedPackage = malloc(total);
+	int offset = 0;
+	int size_to_send;
+	size_to_send = sizeof(package->message_long);
+	memcpy(serializedPackage + offset, &(package->message_long), size_to_send);
+	offset += size_to_send;
+	size_to_send = package->message_long;
+	memcpy(serializedPackage + offset, package->message, size_to_send);
+	return serializedPackage;
 }
 
