@@ -85,17 +85,21 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-/* PARA CHECKPOINT
+/* PARA CHECKPOINT - PROBAR -
 	char* directiva = "\0";
-
 	scanf("%s", directiva);
 	char** directivaSplit = string_n_split(directiva, 2, " ");
-
 	int* tamanio = malloc(sizeof(directivaSplit[2]));
 	char* buffer = malloc(len);
 	buffer = directivaSplit[2];
 	send(clienteCPU, buffer, *tamanio, 0);
-
+	free(buffer);
+	free(tamanio);
+	
+	char* notificacion = malloc(15);
+	recv(clienteCPU, notificacion, 15, 0);
+	log_info(archivoLog, "%s", notificacion);
+	free(notificacion);
 */
 
 //TODO Levantar la consola
@@ -147,7 +151,7 @@ int configurarSocketServidor() {
 
 
 void manejoDeConsola() {
-//TODO Cambiar el tamaño de comando
+
 	comando_t comando;
 
 	int mantenerConsola = 1;
@@ -157,16 +161,44 @@ void manejoDeConsola() {
 		scanf("%s", comando.comandoCompleto);
 
 		if((string_starts_with(comando.comandoCompleto, "correr")) || (string_starts_with(comando.comandoCompleto, "finalizar"))){
-
+		
+			char** comandoSplits = malloc(2 * sizeof(comando.comandoCompleto));
+	
+			comandoSplits = string_n_splits(comando.ComandoCompleto, 2, " ");
+			comando.comando = comandoSplits[1];
+			comando.parametro = comandoSplits[2];
+			
+			free(comandoSplits);
+			
+			if (comando.comando == "correr")
+				correrPath(comando.parametro);
+			else
+				finalizarPID(comando.parametro);
+		}else{
+			
+			//PS CPU
+		
 		}
 	}
 }
 
 
-void correrPath(){
+void correrPath(char* path){
+
+//TODO Definir estructura del PCB y datos del mismo
+	pcb = generarPCB();
+	send(clienteCPU, path, sizeof(path), 0);
 
 }
 
-void finalizarCPU(){
+void finalizarCPU(char* pid){
+
+
+
+}
+
+//Devolvera la estructura completa
+void generarPCB(){
+
 
 }
