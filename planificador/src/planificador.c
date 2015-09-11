@@ -40,11 +40,8 @@ int listeningSocket;
 int clienteCPU;
 
 //Tipos de comandos
-typedef enum {
-	correr, finalizar, ps, cpu
-} comand;
-
 typedef struct{
+	char* comandoCompleto;
 	char* comando;
 	char* parametro;
 } comando_t;
@@ -54,6 +51,9 @@ void configurarPlanificador(char* config);
 int configurarSocketServidor();
 //Funciones de gestion
 void manejoDeConsola();
+//Funciones de comandos
+void correrPath();
+void finalizarCPU();
 
 int main(int argc, char** argv) {
 
@@ -99,8 +99,8 @@ int main(int argc, char** argv) {
 */
 
 //TODO Levantar la consola
-	pthread_t hiloConsola;
-	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
+//	pthread_t hiloConsola;
+//	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
 	return 0;
 
@@ -145,45 +145,23 @@ int configurarSocketServidor() {
 	return 1;
 }
 
+
 void manejoDeConsola() {
 //TODO Cambiar el tamaño de comando
-	char* directiva;
 	comando_t comando;
 
 	int mantenerConsola = 1;
 
 	while (mantenerConsola) {
 
-		scanf("%s", directiva);
+		scanf("%s", comando.comandoCompleto);
 
-		if (string_starts_with(directiva, "correr") || string_starts_with(directiva, "finalizar")){
-			char** directivaSplit = string_n_split(directiva, 2, " ");
-			comando.comando = directivaSplit[1];
-			comando.parametro = directivaSplit[2];
+		if((string_starts_with(comando.comandoCompleto, "correr")) || (string_starts_with(comando.comandoCompleto, "finalizar"))){
 
-			switch (comando->comando){
-			//Correr
-			case 0:
-				correrPath();
-				break;
-			//Finalizar
-			case 1:
-				finalizarCPU();
-				break;
-			}
-		} else {
-			comando->comando = directiva;
-			switch (comando->comando){
-			//PS
-			case 2:
-				break;
-			//CPU
-			case 3:
-				break;
-			}
 		}
 	}
 }
+
 
 void correrPath(){
 
