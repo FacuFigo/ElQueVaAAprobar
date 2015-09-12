@@ -108,30 +108,17 @@ int main(int argc, char** argv) {
 	*/
 
 //TODO Esperar la conexion de CPUs
-//Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes - PREGUNTAR
+//Lo más probable es que se cambie por un hilo que maneje las conexiones - PREGUNTAR
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-// PARA CHECKPOINT - PROBAR -
-	comando_t comando;
-
-	scanf("%s %s", comando.comando, comando.parametro);
-	getchar();
-	if(string_equals_ignore_case(comando.comando,"correr"))
-		send(clienteCPU, comando.parametro, strlen(comando.parametro), 0);
-	
-	char* notificacion = malloc(11);
-	recv(clienteCPU, notificacion, 11, 0);
-	log_info(archivoLog, "%s", notificacion);
-	free(notificacion);
-//
-
 //TODO Levantar la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
+	pthread_join(hiloConsola, NULL);
 	return 0;
 
 }
@@ -178,13 +165,24 @@ int configurarSocketServidor() {
 
 void manejoDeConsola() {
 
-	comando_t comando;
+	printf("Inicio Consola.\n");
 
 	int mantenerConsola = 1;
 
 	while (mantenerConsola) {
 
+		// PARA CHECKPOINT - SACAR -
+		comando_t comando;
+//TODO CAMBIAR POR FGETS
 		scanf("%s %s", comando.comando, comando.parametro);
+		getchar();
+		if(string_equals_ignore_case(comando.comando,"correr"))
+			send(clienteCPU, comando.parametro, strlen(comando.parametro), 0);
+
+		char* notificacion = malloc(11);
+		recv(clienteCPU, notificacion, 11, 0);
+		log_info(archivoLog, "%s", notificacion);
+		free(notificacion);
 
 	}
 }
