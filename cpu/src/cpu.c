@@ -53,10 +53,6 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	archivoLog = log_create("log_CPU", "CPU", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
-	//Chequeo de argumentos
-	if (argc < 1) {
-		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
-	}
 
 	configurarCPU(argv[1]);
 
@@ -73,19 +69,20 @@ int main(int argc, char** argv) {
 
 
 	char* mCod = malloc(15);
+
 	recv(socketPlanificador, mCod, 15, 0);
 	log_info(archivoLog, "Recibi %s", mCod);
 
 	send(socketMemoria, mCod, 15, 0);
 
-	char* notificacion = malloc(15);
-	recv(socketMemoria, notificacion, 15, 0);
+	char* notificacion = malloc(11);
+	recv(socketMemoria, notificacion, 11, 0);
 	log_info(archivoLog, "%s", notificacion);
 
-	send(socketPlanificador, notificacion, 15, 0);
+	send(socketPlanificador, notificacion, 11, 0);
 
-	free(notificacion);
 	free(mCod);
+	free(notificacion);
 
 /*
 	char* msg = "hola";

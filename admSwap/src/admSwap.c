@@ -69,14 +69,12 @@ int main(int argc, char** argv) {
 	char* mCod = malloc(15);
 	recv(clienteMemoria, mCod, 15, 0);
 	log_info(archivoLog, "Recibi %s", mCod);
-	free(mCod);
 
-	char* notificacion = malloc(15);
-	notificacion = "Recibido.";
-	send(clienteMemoria, notificacion, 15, 0);
+	char* notificacion = "Recibido.";
+	send(clienteMemoria, notificacion, strlen(notificacion), 0);
 	log_info(archivoLog, "%s", notificacion);
 
-	free(notificacion);
+	free(mCod);
 	return 0;
 
 }

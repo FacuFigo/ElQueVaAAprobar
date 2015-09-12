@@ -83,11 +83,11 @@ int main(int argc, char** argv) {
 
 	send(socketSwap, mCod, 15, 0);
 
-	char* notificacion = malloc(15);
-	recv(socketSwap, notificacion, 15, 0);
-	log_info(archivoLog, "%s");
+	char* notificacion = malloc(11);
+	recv(socketSwap, notificacion, 11, 0);
+	log_info(archivoLog, "%s", notificacion);
 
-	send(clienteCPU, notificacion, 15, 0);
+	send(clienteCPU, notificacion, 11, 0);
 
 	free(mCod);
 	free(notificacion);

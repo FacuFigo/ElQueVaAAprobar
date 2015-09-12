@@ -41,8 +41,8 @@ int clienteCPU;
 
 //Tipos de comandos
 typedef struct{
-	char* comando;
-	char* parametro;
+	char comando[10];
+	char parametro[50];
 } comando_t;
 
 typedef struct _t_Package {
@@ -117,16 +117,13 @@ int main(int argc, char** argv) {
 // PARA CHECKPOINT - PROBAR -
 	comando_t comando;
 
-	comando.comando = malloc(7);
-	comando.parametro = malloc(15);
-
 	scanf("%s %s", comando.comando, comando.parametro);
 	getchar();
 	if(string_equals_ignore_case(comando.comando,"correr"))
 		send(clienteCPU, comando.parametro, strlen(comando.parametro), 0);
 	
-	char* notificacion = malloc(15);
-	recv(clienteCPU, notificacion, 15, 0);
+	char* notificacion = malloc(11);
+	recv(clienteCPU, notificacion, 11, 0);
 	log_info(archivoLog, "%s", notificacion);
 	free(notificacion);
 //
@@ -187,7 +184,7 @@ void manejoDeConsola() {
 
 	while (mantenerConsola) {
 
-		scanf("%s", comando.comando);
+		scanf("%s %s", comando.comando, comando.parametro);
 
 	}
 }
