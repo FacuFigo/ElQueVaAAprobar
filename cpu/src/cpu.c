@@ -59,35 +59,57 @@ int main(int argc, char** argv) {
 	}
 
 	configurarCPU(argv[1]);
+
 	//conexion con el planificador
-	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
-			&socketPlanificador))
-		log_info(archivoLog, "Conecté con el planificador %i.\n",
-				socketPlanificador);
+	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlanificador))
+		log_info(archivoLog, "Conecté con el planificador %i.\n", socketPlanificador);
 	else
-		log_error(archivoLog, "Error al conectar con el planificador. %s\n",
-				ipPlanificador);
-//	char* msg = "hola";
-//	int tam = strlen(msg);
-//	if (send(socketPlanificador, msg, tam, 0) == -1)
-//		log_error(archivoLog, "Error en el send.\n");
-//	else
-//		log_info(archivoLog, "Mandé \"%s\" a planificador.\n", msg);
+		log_error(archivoLog, "Error al conectar con el planificador. %s\n", ipPlanificador);
+
+	if (configurarSocketCliente(ipMemoria, puertoMemoria,	&socketMemoria))
+		log_info(archivoLog, "Conecté con la Memoria %i.\n", socketMemoria);
+	else
+		log_error(archivoLog, "Error al conectar con la Memoria. %s\n", ipMemoria);
+
+
+	char* mCod = malloc(15);
+	recv(socketPlanificador, mCod, 15, 0);
+	log_info(archivoLog, "Recibi %s", mCod);
+
+	send(socketMemoria, mCod, 15, 0);
+
+	char* notificacion = malloc(15);
+	recv(socketMemoria, notificacion, 15, 0);
+	log_info(archivoLog, "%s", notificacion);
+
+	send(socketPlanificador, notificacion, 15, 0);
+
+	free(notificacion);
+	free(mCod);
+
+/*
+	char* msg = "hola";
+	int tam = strlen(msg);
+	if (send(socketPlanificador, msg, tam, 0) == -1)
+		log_error(archivoLog, "Error en el send.\n");
+	else
+		log_info(archivoLog, "Mandé \"%s\" a planificador.\n", msg);
 	t_Package package;
 	int status = recieve_and_deserialize(&package, socketPlanificador);
 	if (status)
 		log_info(archivoLog, "Planificador says: %s", package.message);
 	//conexion con el adm de mem
 	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
-		log_info(archivoLog, "Conecté con el administrador de memoria %i.\n",
-				socketMemoria);
+		log_info(archivoLog, "Conecté con el administrador de memoria %i.\n", socketMemoria);
 	else
-		log_error(archivoLog, "Error al conectar con la memoria. %s\n",
-				ipMemoria);
-//	if (send(socketMemoria, msg, tam, 0) == -1)
-//		log_error(archivoLog, "Error en el send.\n");
-//	else
-//		log_info(archivoLog, "Mandé \"%s\" a memoria.\n", msg);
+		log_error(archivoLog, "Error al conectar con la memoria. %s\n",	ipMemoria);
+
+	if (send(socketMemoria, msg, tam, 0) == -1)
+		log_error(archivoLog, "Error en el send.\n");
+	else
+		log_info(archivoLog, "Mandé \"%s\" a memoria.\n", msg);
+
+	*/
 
 	return 0;
 
@@ -97,14 +119,11 @@ void configurarCPU(char* config) {
 
 	t_config* configCPU = config_create(config);
 	if (config_has_property(configCPU, "IP_PLANIFICADOR"))
-		ipPlanificador = string_duplicate(
-				config_get_string_value(configCPU, "IP_PLANIFICADOR"));
+		ipPlanificador = string_duplicate(config_get_string_value(configCPU, "IP_PLANIFICADOR"));
 	if (config_has_property(configCPU, "PUERTO_PLANIFICADOR"))
-		puertoPlanificador = config_get_int_value(configCPU,
-				"PUERTO_PLANIFICADOR");
+		puertoPlanificador = config_get_int_value(configCPU, "PUERTO_PLANIFICADOR");
 	if (config_has_property(configCPU, "IP_MEMORIA"))
-		ipMemoria = string_duplicate(
-				config_get_string_value(configCPU, "IP_MEMORIA"));
+		ipMemoria = string_duplicate(config_get_string_value(configCPU, "IP_MEMORIA"));
 	if (config_has_property(configCPU, "PUERTO_MEMORIA"))
 		puertoMemoria = config_get_int_value(configCPU, "PUERTO_MEMORIA");
 	if (config_has_property(configCPU, "CANTIDAD_HILOS"))
@@ -122,8 +141,7 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 	direccionServidor.sin_port = htons(puerto);
 
 	*s = socket(AF_INET, SOCK_STREAM, 0);
-	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))
-			== -1) {
+	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))	== -1) {
 		log_error(archivoLog, "No se pudo conectar");
 		return 0;
 	}

@@ -40,6 +40,7 @@ int cantidadPaginas;
 int listeningSocket;
 int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
+int clienteMemoria;
 
 void configurarAdmSwap(char* config);
 int configurarSocketServidor();
@@ -60,6 +61,22 @@ int main(int argc, char** argv) {
 
 	configurarSocketServidor();
 
+	struct sockaddr_storage direccionCliente;
+	unsigned int len = sizeof(direccionCliente);
+	clienteMemoria = accept(listeningSocket, (void*) &direccionCliente, &len);
+	log_info(archivoLog, "Se conecta el proceso Memoria %i. \n", clienteMemoria);
+
+	char* mCod = malloc(15);
+	recv(clienteMemoria, mCod, 15, 0);
+	log_info(archivoLog, "Recibi %s", mCod);
+	free(mCod);
+
+	char* notificacion = malloc(15);
+	notificacion = "Recibido.";
+	send(clienteMemoria, notificacion, 15, 0);
+	log_info(archivoLog, "%s", notificacion);
+
+	free(notificacion);
 	return 0;
 
 }
@@ -67,28 +84,15 @@ int main(int argc, char** argv) {
 void configurarAdmSwap(char* config) {
 	t_config* configurarAdmSwap = config_create(config);
 	if (config_has_property(configurarAdmSwap, "NOMBRE_SWAP"))
-		nombreSwap = string_duplicate(
-				config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP"));
+		nombreSwap = string_duplicate(config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP"));
 	if (config_has_property(configurarAdmSwap, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_int_value(configurarAdmSwap,
-				"PUERTO_ESCUCHA");
-	if (config_has_property(configurarAdmSwap, "IP_MEMORIA"))
-		ipAdmMemoria = string_duplicate(
-				config_get_string_value(configurarAdmSwap, "IP_MEMORIA"));
-	if (config_has_property(configurarAdmSwap, "PUERTO_MEMORIA"))
-		puertoAdmMemoria = string_duplicate(
-				config_get_string_value(configurarAdmSwap, "PUERTO_MEMORIA"));
-	puertoAdmMemoria = config_get_string_value(configurarAdmSwap,
-			"PUERTO_MEMORIA");
+		puertoEscucha = config_get_int_value(configurarAdmSwap,	"PUERTO_ESCUCHA");
 	if (config_has_property(configurarAdmSwap, "CANTIDAD_PAGINAS"))
-		cantidadPaginas = config_get_int_value(configurarAdmSwap,
-				"CANTIDAD_PAGINAS");
+		cantidadPaginas = config_get_int_value(configurarAdmSwap, "CANTIDAD_PAGINAS");
 	if (config_has_property(configurarAdmSwap, "TAMANIO_PAGINA"))
-		tamanioPagina = config_get_int_value(configurarAdmSwap,
-				"TAMANIO_PAGINA");
+		tamanioPagina = config_get_int_value(configurarAdmSwap,	"TAMANIO_PAGINA");
 	if (config_has_property(configurarAdmSwap, "RETARDO_COMPACTACION"))
-		retardoCompactacion = config_get_int_value(configurarAdmSwap,
-				"RETARDO_COMPACTACION");
+		retardoCompactacion = config_get_int_value(configurarAdmSwap, "RETARDO_COMPACTACION");
 
 	config_destroy(configurarAdmSwap);
 }

@@ -41,7 +41,6 @@ int clienteCPU;
 
 //Tipos de comandos
 typedef struct{
-	char* comandoCompleto;
 	char* comando;
 	char* parametro;
 } comando_t;
@@ -61,7 +60,7 @@ char* serializarOperandos(t_Package *package);
 void fill_package(t_Package *package);
 //Funciones de comandos
 void correrPath();
-void finalizarCPU();
+void finalizarProceso();
 
 int main(int argc, char** argv) {
 
@@ -80,6 +79,7 @@ int main(int argc, char** argv) {
 //TODO Preguntar si se termina el programa o hay que reintentar.
 	configurarSocketServidor();
 
+/*
 //Prueba para testeo de sockets con serializacion -SACAR-
 	//struct sockaddr_in direccionCliente;
 	struct sockaddr_storage direccionCliente;
@@ -105,41 +105,35 @@ int main(int argc, char** argv) {
 			log_info(archivoLog, "Mandé \"%s\" a memoria.\n", package.message);
 	free(serializedPackage);
 	close(clienteCPU);
-//TODO Esperar la conexion de CPUs -minimo 2-
-//Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes
-	///struct sockaddr_in direccionCliente;
-	//unsigned int len;
-	int cantidadCPUs;
-	while(cantidadCPUs < 2){
-		clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
-		log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
-	}
+	*/
 
 //TODO Esperar la conexion de CPUs
 //Lo más probable es que se cambie por un hilo que maneje las conexiones entrantes - PREGUNTAR
+	struct sockaddr_storage direccionCliente;
+	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-/* PARA CHECKPOINT - PROBAR -
-	char* directiva = "\0";
-	scanf("%s", directiva);
-	char** directivaSplit = string_n_split(directiva, 2, " ");
-	int* tamanio = malloc(sizeof(directivaSplit[2]));
-	char* buffer = malloc(len);
-	buffer = directivaSplit[2];
-	send(clienteCPU, buffer, *tamanio, 0);
-	free(buffer);
-	free(tamanio);
+// PARA CHECKPOINT - PROBAR -
+	comando_t comando;
+
+	comando.comando = malloc(7);
+	comando.parametro = malloc(15);
+
+	scanf("%s %s", comando.comando, comando.parametro);
+	getchar();
+	if(string_equals_ignore_case(comando.comando,"correr"))
+		send(clienteCPU, comando.parametro, strlen(comando.parametro), 0);
 	
 	char* notificacion = malloc(15);
 	recv(clienteCPU, notificacion, 15, 0);
 	log_info(archivoLog, "%s", notificacion);
 	free(notificacion);
-*/
+//
 
 //TODO Levantar la consola
-//	pthread_t hiloConsola;
-//	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
+	pthread_t hiloConsola;
+	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
 	return 0;
 
@@ -193,30 +187,30 @@ void manejoDeConsola() {
 
 	while (mantenerConsola) {
 
-		scanf("%s", comando.comandoCompleto);
+		scanf("%s", comando.comando);
 
-		if((string_starts_with(comando.comandoCompleto, "correr")) || (string_starts_with(comando.comandoCompleto, "finalizar"))){
-		
-			char** comandoSplits = malloc(2 * sizeof(comando.comandoCompleto));
-
-			comandoSplits = string_n_split(comando.comandoCompleto, 2, " ");
-			comando.comando = comandoSplits[1];
-			comando.parametro = comandoSplits[2];
-			
-			free(comandoSplits);
-			
-			if (comando.comando == "correr")
-				correrPath(comando.parametro);
-			//else
-				//finalizarPID(comando.parametro);
-		}else{
-			
-			//PS CPU
-		
-		}
 	}
 }
 
+void correrPath(char* path){
+
+//TODO Definir estructura del PCB y datos del mismo
+	//pcb = generarPCB();
+	send(clienteCPU, path, sizeof(path), 0);
+
+}
+
+void finalizarProceso(char* pid){
+
+
+
+}
+
+//Devolvera la estructura completa
+void generarPCB(){
+
+
+}
 
 void fill_package(t_Package *package){
 	/* Me guardo los datos del usuario y el mensaje que manda */
@@ -237,24 +231,4 @@ char* serializarOperandos(t_Package *package){
 	size_to_send = package->message_long;
 	memcpy(serializedPackage + offset, package->message, size_to_send);
 	return serializedPackage;
-}
-
-void correrPath(char* path){
-
-//TODO Definir estructura del PCB y datos del mismo
-	//pcb = generarPCB();
-	send(clienteCPU, path, sizeof(path), 0);
-
-}
-
-void finalizarCPU(char* pid){
-
-
-
-}
-
-//Devolvera la estructura completa
-void generarPCB(){
-
-
 }

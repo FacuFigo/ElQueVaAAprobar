@@ -33,6 +33,7 @@
 #define BACKLOG 5
 
 t_log* archivoLog;
+
 int puertoEscucha;
 char* ipSwap;
 int puertoSwap;
@@ -44,6 +45,7 @@ int entradasTLB;
 char* TLBHabilitada;
 int retardoMemoria;
 int socketSwap;
+int clienteCPU;
 
 void configurarAdmMemoria(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
@@ -63,13 +65,32 @@ int main(int argc, char** argv) {
 	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmMemoria(argv[1]);
 
-	if (configurarSocketCliente(ipSwap, puertoSwap,
-				&socketSwap))
-		log_info(archivoLog, "Conecté al admin de swap %i.\n",
-					socketSwap);
+	if (configurarSocketCliente(ipSwap, puertoSwap,	&socketSwap))
+		log_info(archivoLog, "Conecté al admin de swap %i.\n", socketSwap);
 	else
-		log_error(archivoLog, "Error al conectar en el admin de swap. %s\n",
-					ipSwap);
+		log_error(archivoLog, "Error al conectar en el admin de swap. %s %i \n", ipSwap, puertoSwap);
+
+	configurarSocketServidor();
+
+	struct sockaddr_storage direccionCliente;
+	unsigned int len = sizeof(direccionCliente);
+	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
+	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
+
+	char* mCod = malloc(15);
+	recv(clienteCPU, mCod, 15, 0);
+	log_info(archivoLog, "Recibi %s", mCod);
+
+	send(socketSwap, mCod, 15, 0);
+
+	char* notificacion = malloc(15);
+	recv(socketSwap, notificacion, 15, 0);
+	log_info(archivoLog, "%s");
+
+	send(clienteCPU, notificacion, 15, 0);
+
+	free(mCod);
+	free(notificacion);
 
 	return 0;
 }
@@ -78,30 +99,24 @@ void configurarAdmMemoria(char* config) {
 
 	t_config* configurarAdmMemoria = config_create(config);
 	if (config_has_property(configurarAdmMemoria, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_int_value(configurarAdmMemoria,
-				"PUERTO_ESCUCHA");
+		puertoEscucha = config_get_int_value(configurarAdmMemoria, "PUERTO_ESCUCHA");
 	if (config_has_property(configurarAdmMemoria, "IP_SWAP"))
-		ipSwap = config_get_string_value(configurarAdmMemoria, "IP_SWAP");
+		ipSwap = string_duplicate(config_get_string_value(configurarAdmMemoria, "IP_SWAP"));
 	if (config_has_property(configurarAdmMemoria, "PUERTO_SWAP"))
 		puertoSwap = config_get_int_value(configurarAdmMemoria, "PUERTO_SWAP");
 	if (config_has_property(configurarAdmMemoria, "MAXIMO_MARCOS_POR_PROCESO"))
-		maximoMarcosPorProceso = config_get_int_value(configurarAdmMemoria,
-				"MAXIMO_MARCOS_POR_PROCESO");
+		maximoMarcosPorProceso = config_get_int_value(configurarAdmMemoria, "MAXIMO_MARCOS_POR_PROCESO");
 	if (config_has_property(configurarAdmMemoria, "CANTIDAD_MARCOS"))
-		cantidadMarcos = config_get_int_value(configurarAdmMemoria,
-				"CANTIDAD_MARCOS");
+		cantidadMarcos = config_get_int_value(configurarAdmMemoria,	"CANTIDAD_MARCOS");
 	if (config_has_property(configurarAdmMemoria, "TAMANIO_MARCO"))
-		tamanioMarco = config_get_int_value(configurarAdmMemoria,
-				"TAMANIO_MARCO");
+		tamanioMarco = config_get_int_value(configurarAdmMemoria, "TAMANIO_MARCO");
 	if (config_has_property(configurarAdmMemoria, "ENTRADAS_TLB"))
-		entradasTLB = config_get_int_value(configurarAdmMemoria,
-				"ENTRADAS_TLB");
+		entradasTLB = config_get_int_value(configurarAdmMemoria, "ENTRADAS_TLB");
 	if (config_has_property(configurarAdmMemoria, "TLB_HABILITADA"))
-		TLBHabilitada = config_get_string_value(configurarAdmMemoria,
-				"TLB_HABILITADA");
+		TLBHabilitada = string_duplicate(config_get_string_value(configurarAdmMemoria, "TLB_HABILITADA"));
 	if (config_has_property(configurarAdmMemoria, "RETARDO_MEMORIA"))
-		retardoMemoria = config_get_int_value(configurarAdmMemoria,
-				"RETARDO_MEMORIA");
+		retardoMemoria = config_get_int_value(configurarAdmMemoria, "RETARDO_MEMORIA");
+
 	config_destroy(configurarAdmMemoria);
 }
 
@@ -113,14 +128,14 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 	direccionServidor.sin_port = htons(puerto);
 
 	*s = socket(AF_INET, SOCK_STREAM, 0);
-	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))
-			== -1) {
+	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor)) == -1) {
 		log_error(archivoLog, "No se pudo conectar");
 		return 0;
 	}
 
 	return 1;
 }
+
 
 
 int configurarSocketServidor() {
@@ -133,11 +148,9 @@ int configurarSocketServidor() {
 	listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
 
 	int activado = 1;
-	setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &activado,
-			sizeof(activado));
+	setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &activado, sizeof(activado));
 
-	if (bind(listeningSocket, (void*) &direccionServidor,
-			sizeof(direccionServidor)) != 0) {
+	if (bind(listeningSocket, (void*) &direccionServidor, sizeof(direccionServidor)) != 0) {
 		log_error(archivoLog, "Falló el bind");
 		return 1;
 	}
