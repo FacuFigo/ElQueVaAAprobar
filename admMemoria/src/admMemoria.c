@@ -56,19 +56,14 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	archivoLog = log_create("log_AdmMemoria", "AdmMemoria", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
-	//Chequeo de argumentos
-
-	if (argc < 1) {
-		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
-	}
 
 	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmMemoria(argv[1]);
 
 	if (configurarSocketCliente(ipSwap, puertoSwap,	&socketSwap))
-		log_info(archivoLog, "Conecté al admin de swap %i.\n", socketSwap);
+		log_info(archivoLog, "Conectado al Administrador de Swap %i.\n", socketSwap);
 	else
-		log_error(archivoLog, "Error al conectar en el admin de swap. %s %i \n", ipSwap, puertoSwap);
+		log_error(archivoLog, "Error al conectar en el Administrador de Swap. %s %i \n", ipSwap, puertoSwap);
 
 	configurarSocketServidor();
 

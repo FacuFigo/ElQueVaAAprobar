@@ -53,26 +53,26 @@ uint32_t message_long;
 //Funciones de configuracion
 void configurarPlanificador(char* config);
 int configurarSocketServidor();
+
 //Funciones de gestion
 void manejoDeConsola();
+void planificador();
+
 //Funciones de sockets
 char* serializarOperandos(t_Package *package);
 void fill_package(t_Package *package);
+
 //Funciones de comandos
-void correrPath();
-void finalizarProceso();
+void correrProceso(char* path);
+void finalizarProceso(char* pid);
+void generarPCB();
 
 int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
 	archivoLog = log_create("log_Planificador", "Planificador", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
-	//Chequeo de argumentos
-	if (argc < 1) {
-		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
-	}
 
-//TODO Leer archivo de configuracion y extraer variables
 	configurarPlanificador(argv[1]);
 
 //Creacion de servidor
@@ -107,18 +107,22 @@ int main(int argc, char** argv) {
 	close(clienteCPU);
 	*/
 
-//TODO Esperar la conexion de CPUs
+//Esperar la conexion de CPUs
 //Lo más probable es que se cambie por un hilo que maneje las conexiones - PREGUNTAR
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-//TODO Levantar la consola
+//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
 	pthread_join(hiloConsola, NULL);
+
+	pthread_t hiloPlanificador;
+	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
+
 	return 0;
 
 }
@@ -171,38 +175,44 @@ void manejoDeConsola() {
 
 	while (mantenerConsola) {
 
-		// PARA CHECKPOINT - SACAR -
 		comando_t comando;
 //TODO CAMBIAR POR FGETS
 		scanf("%s %s", comando.comando, comando.parametro);
 		getchar();
-		if(string_equals_ignore_case(comando.comando,"correr"))
-			send(clienteCPU, comando.parametro, strlen(comando.parametro), 0);
+		if(string_equals_ignore_case(comando.comando,"correr")){
+//			correrProceso((char *) comando.parametro);
+			send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
+		}else{
 
+		}
+
+/*
 		char* notificacion = malloc(11);
 		recv(clienteCPU, notificacion, 11, 0);
 		log_info(archivoLog, "%s", notificacion);
 		free(notificacion);
-
+*/
 	}
 }
 
-void correrPath(char* path){
+//TODO No envia bien el mensaje - ARREGLAR -
+void correrProceso(char* path){
 
-//TODO Definir estructura del PCB y datos del mismo
-	//pcb = generarPCB();
+	generarPCB();
 	send(clienteCPU, path, sizeof(path), 0);
-
-}
-
-void finalizarProceso(char* pid){
-
-
+//Agregar a la cola de procesos para el planificador
 
 }
 
 //Devolvera la estructura completa
 void generarPCB(){
+
+
+
+}
+
+void finalizarProceso(char* pid){
+
 
 
 }
@@ -226,4 +236,8 @@ char* serializarOperandos(t_Package *package){
 	size_to_send = package->message_long;
 	memcpy(serializedPackage + offset, package->message, size_to_send);
 	return serializedPackage;
+}
+
+void planificador(){
+
 }

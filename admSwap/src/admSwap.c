@@ -55,10 +55,6 @@ int main(int argc, char** argv) {
 	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmSwap(argv[1]);
 
-	if (argc < 1) {
-		log_error(archivoLog, "Falta el archivo de configuraciones.\n");
-	}
-
 	configurarSocketServidor();
 
 	struct sockaddr_storage direccionCliente;

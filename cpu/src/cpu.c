@@ -58,14 +58,14 @@ int main(int argc, char** argv) {
 
 	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlanificador))
-		log_info(archivoLog, "Conecté con el planificador %i.\n", socketPlanificador);
+		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlanificador);
 	else
-		log_error(archivoLog, "Error al conectar con el planificador. %s\n", ipPlanificador);
+		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
 	if (configurarSocketCliente(ipMemoria, puertoMemoria,	&socketMemoria))
-		log_info(archivoLog, "Conecté con la Memoria %i.\n", socketMemoria);
+		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
 	else
-		log_error(archivoLog, "Error al conectar con la Memoria. %s\n", ipMemoria);
+		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
 
 	char* mCod = malloc(15);
