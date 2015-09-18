@@ -64,12 +64,18 @@ int main(int argc, char** argv) {
 
 	char* mCod = malloc(15);
 	recv(clienteMemoria, mCod, 15, 0);
-	log_info(archivoLog, "Recibi %s", mCod);
+	log_info(archivoLog, "Recibí %s", mCod);
 
 	char* notificacion = "Recibido.";
 	send(clienteMemoria, notificacion, strlen(notificacion), 0);
 	log_info(archivoLog, "%s", notificacion);
 
+// Recibe el mProc de Memoria
+	char* mProc = malloc(15);
+	recv(clienteMemoria, mProc, 15, 0);
+	log_info(archivoLog, "Recibí %s", mProc);
+
+	free(mProc);
 	free(mCod);
 	return 0;
 

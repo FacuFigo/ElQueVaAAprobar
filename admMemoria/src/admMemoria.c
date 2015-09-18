@@ -84,8 +84,18 @@ int main(int argc, char** argv) {
 
 	send(clienteCPU, notificacion, 11, 0);
 
+// Recibe el pedido de lectura de cpu y se lo reenvía a swap
+	char* pedidoLectura = malloc(15);
+	recv(clienteCPU, pedidoLectura, 15, 0);
+	log_info(archivoLog, "Recibí %s", pedidoLectura);
+
+	send(socketSwap, pedidoLectura, 15, 0);
+	log_info(archivoLog, "Envíe a Swap %s", pedidoLectura);
+
+
 	free(mCod);
 	free(notificacion);
+	free(pedidoLectura);
 
 	return 0;
 }
