@@ -44,9 +44,25 @@ typedef struct _t_Package {
 	uint32_t message_long;
 } t_Package;
 
+typedef struct{
+	pthread_t hilo;
+	int id;
+} t_hilo;
+
+typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
+
+
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int recieve_and_deserialize(t_Package *package, int socketCliente);
+void configurarHilo(t_hilo hiloCPU);
+void ejecutarmProc(char* ruta);
+char* iniciarmProc(char* comando);
+char* leermProc(char* comando);
+char* escribirmProc(char* comando);
+char* entradaSalidamProc(char* comando);
+char* finalizarmProc(char* comando);
+
 
 int main(int argc, char** argv) {
 
@@ -83,6 +99,23 @@ int main(int argc, char** argv) {
 
 	free(mCod);
 	free(notificacion);
+
+
+	// Por ahora pruebo con un solo hilo para el Checkpoint
+
+	t_hilo hilo1;
+
+	char* path= malloc (30);
+	char* instruccionSiguiente= malloc(20);
+	recv(socketPlanificador, path, 30, 0);
+	recv(socketPlanificador, instruccionSiguiente, 20, 0);
+
+	configurarHilo(hilo1);
+
+
+    free (path);
+
+
 
 /*
 	char* msg = "hola";
@@ -163,4 +196,58 @@ int recieve_and_deserialize(t_Package *package, int socketCliente) {
 	free(buffer);
 	return status;
 }
+
+
+
+configurarHilo(t_hilo hiloCPU){
+	pthread_create(&hiloCPU.hilo, NULL, (void *) ejecutarmProc, NULL);
+    hiloCPU.id= process_get_thread_id;
+
+    log_info(archivoLog, "Instancia de cpu: %d creada", hiloCPU.id);
+}
+
+
+void ejecutarmProc(char* path){
+	FILE* fp;
+	char* comando= malloc(20);
+	char* instruccion= malloc(10);
+    char** comandoSplit= malloc(sizeof (char*)*3);
+
+	fp= fopen("path", "r");
+	while (fgets(comando, 20, fp) != NULL) {
+
+		comandoSplit= string_split(comando, ",");
+        instruccion= comandoSplit[0];
+
+		   switch(instruccion){
+		   case iniciar:
+			   iniciarmProc(comando);
+			   break;
+		   case leer:
+			   leermProc(comando);
+			   break;
+		   case escribir:
+		       escribirmProc(comando);
+		       break;
+		   case entradaSalida:
+			   entradaSalidamProc(comando);
+			   break;
+		   case finalizar:
+			   finalizarmProc();
+			   break;
+		}
+
+		   sleep(retardo);
+	}
+
+  free(comandoSplit);
+  free(instruccion);
+  free(comando);
+  fclose(fp);
+
+
+}
+
+
+
 
