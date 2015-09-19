@@ -39,16 +39,26 @@ int quantum;
 int listeningSocket;
 int clienteCPU;
 
-//Tipos de comandos
+int pIDContador = 1;
+
+//Estructuras
+typedef enum {READY, RUNNING, BLOCKED} estados_t;
+
 typedef struct{
 	char comando[10];
 	char parametro[50];
 } comando_t;
 
 typedef struct _t_Package {
-char* message;
-uint32_t message_long;
+	char* message;
+	uint32_t message_long;
 } t_Package;
+
+typedef struct {
+	int processID;
+	estados_t estadoProceso;
+	int pCrogramCounter;
+} pcb_t;
 
 //Funciones de configuracion
 void configurarPlanificador(char* config);
@@ -65,7 +75,7 @@ void fill_package(t_Package *package);
 //Funciones de comandos
 void correrProceso(char* path);
 void finalizarProceso(char* pid);
-void generarPCB();
+void generarPCB(pcb_t* pcb);
 
 int main(int argc, char** argv) {
 
@@ -114,14 +124,19 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
+//Creo las estructuras de planificación
+
+
+//TODO Hilo multiplexor
 //Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
-	pthread_join(hiloConsola, NULL);
-
 	pthread_t hiloPlanificador;
 	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
+
+	pthread_join(hiloConsola, NULL);
+	pthread_join(hiloPlanificador, NULL);
 
 	return 0;
 
@@ -198,17 +213,24 @@ void manejoDeConsola() {
 //TODO No envia bien el mensaje - ARREGLAR -
 void correrProceso(char* path){
 
-	generarPCB();
+	pcb_t* pcbProc = malloc(sizeof(pcb_t));
+	generarPCB(pcbProc);
 	send(clienteCPU, path, sizeof(path), 0);
-//Agregar a la cola de procesos para el planificador
 
 }
 
-//Devolvera la estructura completa
-void generarPCB(){
+//Devolvera la estructura completa?
+void generarPCB(pcb_t* pcb){
 
+//TODO Agregar un semaforo para cuidar el PID
+	pcb->processID = pIDContador;
+	pcb->pCrogramCounter = 0;
+	pcb->estadoProceso = 0;
 
+//TODO Agrego a la cola READY
+//	queue_push(&colaReady, &pcb->processID);
 
+	pIDContador++;
 }
 
 void finalizarProceso(char* pid){
