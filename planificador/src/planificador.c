@@ -38,13 +38,18 @@ char* algoritmo;
 int quantum;
 int listeningSocket;
 int clienteCPU;
+t_queue* colaReady;
+t_queue* colaRunning;
+t_queue* colaBlocked;
+
 
 int pIDContador = 1;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
 
-typedef struct{
+//Tipos de comandos
+typedef struct {
 	char comando[10];
 	char parametro[50];
 } comando_t;
@@ -89,33 +94,33 @@ int main(int argc, char** argv) {
 //TODO Preguntar si se termina el programa o hay que reintentar.
 	configurarSocketServidor();
 
-/*
-//Prueba para testeo de sockets con serializacion -SACAR-
-	//struct sockaddr_in direccionCliente;
-	struct sockaddr_storage direccionCliente;
-	unsigned int len = sizeof(direccionCliente);
-	t_Package package;
-	package.message = malloc(100);
-	char *serializedPackage;
-	clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
+	/*
+	 //Prueba para testeo de sockets con serializacion -SACAR-
+	 //struct sockaddr_in direccionCliente;
+	 struct sockaddr_storage direccionCliente;
+	 unsigned int len = sizeof(direccionCliente);
+	 t_Package package;
+	 package.message = malloc(100);
+	 char *serializedPackage;
+	 clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
+	 log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
 
-	puts("Escriba un texto para mandar");
-	scanf("%s",package.message);
-	getchar();
-	int size = strlen(package.message);
-	package.message_long=size+ 1;
-	serializedPackage = serializarOperandos(&package);
+	 puts("Escriba un texto para mandar");
+	 scanf("%s",package.message);
+	 getchar();
+	 int size = strlen(package.message);
+	 package.message_long=size+ 1;
+	 serializedPackage = serializarOperandos(&package);
 
-	//int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
-	//log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
-	if (send(clienteCPU, serializedPackage, (sizeof(package.message_long)+package.message_long), 0) == -1)
-			log_error(archivoLog, "Error en el send.\n");
-	else
-			log_info(archivoLog, "Mandé \"%s\" a memoria.\n", package.message);
-	free(serializedPackage);
-	close(clienteCPU);
-	*/
+	 //int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
+	 //log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
+	 if (send(clienteCPU, serializedPackage, (sizeof(package.message_long)+package.message_long), 0) == -1)
+	 log_error(archivoLog, "Error en el send.\n");
+	 else
+	 log_info(archivoLog, "Mandé \"%s\" a memoria.\n", package.message);
+	 free(serializedPackage);
+	 close(clienteCPU);
+	 */
 
 //Esperar la conexion de CPUs
 //Lo más probable es que se cambie por un hilo que maneje las conexiones - PREGUNTAR
@@ -124,10 +129,15 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-//Creo las estructuras de planificación
-
-
 //TODO Hilo multiplexor
+
+//Creacion de colas
+
+	colaReady = queue_create();
+	colaRunning = queue_create();
+	colaBlocked = queue_create();
+
+
 //Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
@@ -146,9 +156,12 @@ void configurarPlanificador(char* config) {
 
 	t_config* configPlanificador = config_create(config);
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_int_value(configPlanificador, "PUERTO_ESCUCHA");
+		puertoEscucha = config_get_int_value(configPlanificador,
+				"PUERTO_ESCUCHA");
 	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICADOR"))
-		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICADOR"));
+		algoritmo = string_duplicate(
+				config_get_string_value(configPlanificador,
+						"ALGORITMO_PLANIFICADOR"));
 	if (config_has_property(configPlanificador, "QUANTUM"))
 		quantum = config_get_int_value(configPlanificador, "QUANTUM");
 	config_destroy(configPlanificador);
@@ -175,12 +188,10 @@ int configurarSocketServidor() {
 
 	listen(listeningSocket, BACKLOG);
 
-
 	log_info(archivoLog, "Servidor creado. %i\n", listeningSocket);
 
 	return 1;
 }
-
 
 void manejoDeConsola() {
 
@@ -194,24 +205,24 @@ void manejoDeConsola() {
 //TODO CAMBIAR POR FGETS
 		scanf("%s %s", comando.comando, comando.parametro);
 		getchar();
-		if(string_equals_ignore_case(comando.comando,"correr")){
+		if (string_equals_ignore_case(comando.comando, "correr")) {
 //			correrProceso((char *) comando.parametro);
 			send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
-		}else{
+		} else {
 
 		}
 
-/*
-		char* notificacion = malloc(11);
-		recv(clienteCPU, notificacion, 11, 0);
-		log_info(archivoLog, "%s", notificacion);
-		free(notificacion);
-*/
+		/*
+		 char* notificacion = malloc(11);
+		 recv(clienteCPU, notificacion, 11, 0);
+		 log_info(archivoLog, "%s", notificacion);
+		 free(notificacion);
+		 */
 	}
 }
 
 //TODO No envia bien el mensaje - ARREGLAR -
-void correrProceso(char* path){
+void correrProceso(char* path) {
 
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
@@ -219,7 +230,8 @@ void correrProceso(char* path){
 
 }
 
-//Devolvera la estructura completa?
+
+//Devolvera la estrructura completa?
 void generarPCB(pcb_t* pcb){
 
 //TODO Agregar un semaforo para cuidar el PID
@@ -228,26 +240,24 @@ void generarPCB(pcb_t* pcb){
 	pcb->estadoProceso = 0;
 
 //TODO Agrego a la cola READY
-//	queue_push(&colaReady, &pcb->processID);
+	queue_push(colaReady, &pcb->processID);
 
 	pIDContador++;
 }
 
-void finalizarProceso(char* pid){
-
-
+void finalizarProceso(char* pid) {
 
 }
 
-void fill_package(t_Package *package){
+void fill_package(t_Package *package) {
 	/* Me guardo los datos del usuario y el mensaje que manda */
-	scanf("%s",package->message);
+	scanf("%s", package->message);
 	getchar();
 	//(package->message)[strlen(package->message)] = '\0';
-	package->message_long = strlen(package->message)+1; // Me guardo lugar para el \0
+	package->message_long = strlen(package->message) + 1; // Me guardo lugar para el \0
 }
 
-char* serializarOperandos(t_Package *package){
+char* serializarOperandos(t_Package *package) {
 	int total = sizeof(package->message_long) + package->message_long;
 	char *serializedPackage = malloc(total);
 	int offset = 0;
@@ -260,6 +270,6 @@ char* serializarOperandos(t_Package *package){
 	return serializedPackage;
 }
 
-void planificador(){
+void planificador() {
 
 }
