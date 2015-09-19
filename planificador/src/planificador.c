@@ -38,15 +38,19 @@ char* algoritmo;
 int quantum;
 int listeningSocket;
 int clienteCPU;
-t_queue* colaReady;
-t_queue* colaRunning;
-t_queue* colaBlocked;
+t_queue* queueReady;
+t_queue* queueRunning;
+t_queue* queueBlocked;
+t_queue* queueCPU;
+t_queue* queueCPULibre;
 
 
 int pIDContador = 1;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
+
+
 
 //Tipos de comandos
 typedef struct {
@@ -63,6 +67,7 @@ typedef struct {
 	int processID;
 	estados_t estadoProceso;
 	int pCrogramCounter;
+	char path[50];
 } pcb_t;
 
 //Funciones de configuracion
@@ -133,9 +138,9 @@ int main(int argc, char** argv) {
 
 //Creacion de colas
 
-	colaReady = queue_create();
-	colaRunning = queue_create();
-	colaBlocked = queue_create();
+	queueReady = queue_create();
+	queueRunning = queue_create();
+	queueBlocked = queue_create();
 
 
 //Comienza el thread de la consola
@@ -144,6 +149,18 @@ int main(int argc, char** argv) {
 
 	pthread_t hiloPlanificador;
 	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
+	//Meto la cpu que se conecta a la cola de libres
+	queue_push(queueCPULibre, &clienteCPU);
+
+	if (! queue_is_empty(queueCPULibre)){
+
+		pcb_t *auxPCB = queue_pop(queueReady);
+		int *auxCPU = queue_pop(queueCPULibre);
+		queue_push(queueRunning, auxPCB);
+		queue_push(queueCPU, auxCPU);
+
+	}
+//switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
 
 	pthread_join(hiloConsola, NULL);
 	pthread_join(hiloPlanificador, NULL);
@@ -226,8 +243,8 @@ void correrProceso(char* path) {
 
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
+	pcbProc->path = string_duplicate(path);
 	send(clienteCPU, path, sizeof(path), 0);
-
 }
 
 
@@ -237,12 +254,15 @@ void generarPCB(pcb_t* pcb){
 //TODO Agregar un semaforo para cuidar el PID
 	pcb->processID = pIDContador;
 	pcb->pCrogramCounter = 0;
+	//El estado se asigna a Ready
 	pcb->estadoProceso = 0;
 
 //TODO Agrego a la cola READY
-	queue_push(colaReady, &pcb->processID);
+
+	queue_push(queueReady, pcb);
 
 	pIDContador++;
+
 }
 
 void finalizarProceso(char* pid) {
