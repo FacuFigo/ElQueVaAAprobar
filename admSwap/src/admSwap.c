@@ -42,19 +42,19 @@ int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
 int clienteMemoria;
 
+//Funciones de configuración
 void configurarAdmSwap(char* config);
 int configurarSocketServidor();
 
 int main(int argc, char** argv) {
-	//Creo el archivo de logs
 
+	//Creo el archivo de logs
 	archivoLog = log_create("log_SWAP", "SWAP", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
-	//Chequeo de argumentos
 
-	//TODO Leer archivo de configuracion y extraer variables
 	configurarAdmSwap(argv[1]);
 
+	//Configuro el servidor
 	configurarSocketServidor();
 
 	struct sockaddr_storage direccionCliente;
@@ -62,6 +62,26 @@ int main(int argc, char** argv) {
 	clienteMemoria = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso Memoria %i. \n", clienteMemoria);
 
+	//Creo el archivo de Swap
+	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
+
+	char* comando = string_from_format("sudo dd if=/dev/sda1 of=/home/utnso/Swap bs=%i count=%i", tamanioArchivoSwap);
+
+	if(system(comando) == -1)
+		log_info(archivoLog, "No se pudo crear el archivo de Swap.\n");
+	else
+		log_info(archivoLog, "Se creó el archivo de Swap.\n");
+
+	//Abro e inicializo el archivo con "\0"
+	FILE* archivoSwap;
+
+	archivoSwap = fopen("archivoSwap", "r+");
+
+	while(!feof(archivoSwap)){
+		fputc('\0',archivoSwap);
+	}
+
+//CHECKPOINT 1
 	char* mCod = malloc(15);
 	recv(clienteMemoria, mCod, 15, 0);
 	log_info(archivoLog, "Recibí %s", mCod);
