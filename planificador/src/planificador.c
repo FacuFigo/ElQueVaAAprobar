@@ -49,6 +49,7 @@ int pIDContador = 1;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
+typedef enum {FINISH, QUANTUM} estadoCPU_t; //el cpu avisa si termino la rafaga (FIFO) o quantum(RR)
 
 typedef struct {
 	char* comando;
@@ -135,6 +136,8 @@ int main(int argc, char** argv) {
 	queueReady = queue_create();
 	queueRunning = queue_create();
 	queueBlocked = queue_create();
+	queueCPU = queue_create();
+	queueCPULibre = queue_create();
 
 //TODO Hilo multiplexor
 	//Comienza el thread de la consola
@@ -154,9 +157,27 @@ int main(int argc, char** argv) {
 		queue_push(queueRunning, auxPCB);
 		queue_push(queueCPU, auxCPU);
 
-	}
+}
+		char* estadoCPU = malloc(15);
+		recv(clienteCPU, estadoCPU, 15, 0);
+
 //switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
 
+	switch(clienteCPU)
+{
+	case FINISH: queue_pop(queueRunning);
+				 int *auxCPU = queue_pop(queueCPU);
+				 queue_push(queueCPULibre, auxCPU);
+				 free(estadoCPU);
+				 break;
+//TODO cuando va a block asignarle nuevo proceso a la cpu libre, lo comento porque en primer linea de quantum da error de label (?)
+//	case QUANTUM: pcb_t *auxPCB = queue_pop(queueRunning);
+//				  queue_push(queueBlocked, auxCPU );
+//				  *auxCPU = queue_pop(queueCPU);
+//				  queue_push(queueCPULibre, auxCPU);
+//				  free(estadoCPU);
+//				  break;
+}
 	pthread_join(hiloConsola, NULL);
 	pthread_join(hiloPlanificador, NULL);
 
@@ -228,7 +249,7 @@ void manejoDeConsola() {
 			 else 
 				finalizarProceso(comando.parametro);
 		} else {
-			if (string_equals_ignore_case(comando.comando, "ps")
+			if (string_equals_ignore_case(comando.comando, "ps"))
 				estadoProcesos();
 			else 
 				comandoCPU();
