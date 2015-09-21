@@ -50,12 +50,9 @@ int pIDContador = 1;
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
 
-
-
-//Tipos de comandos
 typedef struct {
-	char comando[10];
-	char parametro[50];
+	char* comando;
+	char* parametro;
 } comando_t;
 
 typedef struct _t_Package {
@@ -84,8 +81,10 @@ void fill_package(t_Package *package);
 
 //Funciones de comandos
 void correrProceso(char* path);
-void finalizarProceso(char* pid);
 void generarPCB(pcb_t* pcb);
+void finalizarProceso(char* pid);
+void estadoProcesos();
+void comandoCPU();
 
 int main(int argc, char** argv) {
 
@@ -109,14 +108,12 @@ int main(int argc, char** argv) {
 	 char *serializedPackage;
 	 clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
 	 log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
-
 	 puts("Escriba un texto para mandar");
 	 scanf("%s",package.message);
 	 getchar();
 	 int size = strlen(package.message);
 	 package.message_long=size+ 1;
 	 serializedPackage = serializarOperandos(&package);
-
 	 //int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
 	 //log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
 	 if (send(clienteCPU, serializedPackage, (sizeof(package.message_long)+package.message_long), 0) == -1)
@@ -134,19 +131,17 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-//TODO Hilo multiplexor
-
-//Creacion de colas
-
+	//Creacion de colas
 	queueReady = queue_create();
 	queueRunning = queue_create();
 	queueBlocked = queue_create();
 
-
-//Comienza el thread de la consola
+//TODO Hilo multiplexor
+	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
+	//Comienza el thread del planificador
 	pthread_t hiloPlanificador;
 	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
 	//Meto la cpu que se conecta a la cola de libres
@@ -219,53 +214,76 @@ void manejoDeConsola() {
 	while (mantenerConsola) {
 
 		comando_t comando;
-//TODO CAMBIAR POR FGETS
+		
+		comando.comando = malloc(10);
+		comando.parametro = malloc(50);
+		
+//TODO Cambiar scanf() por fgets()
 		scanf("%s %s", comando.comando, comando.parametro);
 		getchar();
-		if (string_equals_ignore_case(comando.comando, "correr")) {
-//			correrProceso((char *) comando.parametro);
-			send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
+		if (comando.parametro == NULL){
+			if (string_equals_ignore_case(comando.comando, "correr")) 
+				//correrProceso(comando.parametro);
+				send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
+			 else 
+				finalizarProceso(comando.parametro);
 		} else {
-
+			if (string_equals_ignore_case(comando.comando, "ps")
+				estadoProcesos();
+			else 
+				comandoCPU();
 		}
 
-		/*
-		 char* notificacion = malloc(11);
-		 recv(clienteCPU, notificacion, 11, 0);
-		 log_info(archivoLog, "%s", notificacion);
-		 free(notificacion);
-		 */
+		//Recibo notificacion del cpu para saber como termino la operacion
+		char* notificacion = malloc(11);
+		recv(clienteCPU, notificacion, 11, 0);
+		log_info(archivoLog, "%s", notificacion);
+		
+		//Libero todas las variables dinamicas
+		free(notificacion);
+		free(comando.comando);
+		free(comando.parametro);
 	}
 }
 
 //TODO No envia bien el mensaje - ARREGLAR -
 void correrProceso(char* path) {
-
+	
+	//TODO Ver una mejor forma de crear el PCB 
+	//o crear una estructura para control que no sean las queue del planificador
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
 	send(clienteCPU, path, sizeof(path), 0);
+
 }
 
 
-//Devolvera la estrructura completa?
 void generarPCB(pcb_t* pcb){
 
-//TODO Agregar un semaforo para cuidar el PID
 	pcb->processID = pIDContador;
 	pcb->pCrogramCounter = 0;
 	//El estado se asigna a Ready
 	pcb->estadoProceso = 0;
 
-//TODO Agrego a la cola READY
-
+	//Agrego a la cola READY
 	queue_push(queueReady, pcb);
 
 	pIDContador++;
+	
+	log_info(archivoLog, "Se genero el PCB del proceso %i", pcb->processID);
 
 }
 
-void finalizarProceso(char* pid) {
+void finalizarProceso(char* pid){
+
+}
+
+void estadoProcesos(){
+	
+}
+
+void comandoCPU(){
 
 }
 
