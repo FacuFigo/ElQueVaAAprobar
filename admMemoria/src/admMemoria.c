@@ -76,6 +76,9 @@ int main(int argc, char** argv) {
 	recv(clienteCPU, mCod, 15, 0);
 	log_info(archivoLog, "Recibi %s", mCod);
 
+
+
+
 	send(socketSwap, mCod, 15, 0);
 
 	char* notificacion = malloc(11);
@@ -84,18 +87,11 @@ int main(int argc, char** argv) {
 
 	send(clienteCPU, notificacion, 11, 0);
 
-// Recibe el pedido de lectura de cpu y se lo reenvía a swap
-	char* pedidoLectura = malloc(15);
-	recv(clienteCPU, pedidoLectura, 15, 0);
-	log_info(archivoLog, "Recibí %s", pedidoLectura);
-
-	send(socketSwap, pedidoLectura, 15, 0);
-	log_info(archivoLog, "Envíe a Swap %s", pedidoLectura);
 
 
 	free(mCod);
 	free(notificacion);
-	free(pedidoLectura);
+
 
 	return 0;
 }
@@ -168,3 +164,25 @@ int configurarSocketServidor() {
 	return 1;
 }
 
+
+int** iniciarmProc(int cantPaginas){
+	int** tablaAux=malloc(sizeof(int)*cantPaginas);
+	char* notificacion=malloc(sizeof(char)*20);
+	if (tablaAux== NULL){
+		notificacion="mProc PID - Fallo";
+		send(clienteCPU, notificacion, sizeof(char)*20, 0);
+	}
+	else{
+		notificacion="mProc PID - Iniciado";
+				send(clienteCPU, notificacion, sizeof(char)*20, 0);
+				log_info(archivoLog, "Proceso mProc PID creado con %d paginas asignadas",cantPaginas);
+	}
+	return tablaAux;
+}
+
+
+
+
+leermProc(int nroPagina){
+
+}
