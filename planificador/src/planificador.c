@@ -38,6 +38,9 @@ char* algoritmo;
 int quantum;
 int listeningSocket;
 int clienteCPU;
+
+t_list* listaProcesos;
+
 t_queue* queueReady;
 t_queue* queueRunning;
 t_queue* queueBlocked;
@@ -64,8 +67,8 @@ typedef struct _t_Package {
 typedef struct {
 	int processID;
 	estados_t estadoProceso;
-	int pCrogramCounter;
-	char path[50];
+	int programCounter;
+	char* path;
 } pcb_t;
 
 //Funciones de configuracion
@@ -95,8 +98,7 @@ int main(int argc, char** argv) {
 
 	configurarPlanificador(argv[1]);
 
-//Creacion de servidor
-//TODO Preguntar si se termina el programa o hay que reintentar.
+	//Creacion de servidor
 	configurarSocketServidor();
 
 	/*
@@ -147,37 +149,7 @@ int main(int argc, char** argv) {
 	//Comienza el thread del planificador
 	pthread_t hiloPlanificador;
 	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
-	//Meto la cpu que se conecta a la cola de libres
-	queue_push(queueCPULibre, &clienteCPU);
 
-	if (! queue_is_empty(queueCPULibre)){
-
-		pcb_t *auxPCB = queue_pop(queueReady);
-		int *auxCPU = queue_pop(queueCPULibre);
-		queue_push(queueRunning, auxPCB);
-		queue_push(queueCPU, auxCPU);
-
-}
-		char* estadoCPU = malloc(15);
-		recv(clienteCPU, estadoCPU, 15, 0);
-
-//switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
-
-	switch(clienteCPU)
-{
-	case FINISH: queue_pop(queueRunning);
-				 int *auxCPU = queue_pop(queueCPU);
-				 queue_push(queueCPULibre, auxCPU);
-				 free(estadoCPU);
-				 break;
-//TODO cuando va a block asignarle nuevo proceso a la cpu libre, lo comento porque en primer linea de quantum da error de label (?)
-//	case QUANTUM: pcb_t *auxPCB = queue_pop(queueRunning);
-//				  queue_push(queueBlocked, auxCPU );
-//				  *auxCPU = queue_pop(queueCPU);
-//				  queue_push(queueCPULibre, auxCPU);
-//				  free(estadoCPU);
-//				  break;
-}
 	pthread_join(hiloConsola, NULL);
 	pthread_join(hiloPlanificador, NULL);
 
@@ -188,13 +160,11 @@ int main(int argc, char** argv) {
 void configurarPlanificador(char* config) {
 
 	t_config* configPlanificador = config_create(config);
+
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
-		puertoEscucha = config_get_int_value(configPlanificador,
-				"PUERTO_ESCUCHA");
+		puertoEscucha = config_get_int_value(configPlanificador, "PUERTO_ESCUCHA");
 	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICADOR"))
-		algoritmo = string_duplicate(
-				config_get_string_value(configPlanificador,
-						"ALGORITMO_PLANIFICADOR"));
+		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICADOR"));
 	if (config_has_property(configPlanificador, "QUANTUM"))
 		quantum = config_get_int_value(configPlanificador, "QUANTUM");
 	config_destroy(configPlanificador);
@@ -244,8 +214,8 @@ void manejoDeConsola() {
 		getchar();
 		if (comando.parametro == NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) 
-				//correrProceso(comando.parametro);
-				send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
+				correrProceso(comando.parametro);
+				//send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
 			 else 
 				finalizarProceso(comando.parametro);
 		} else {
@@ -267,7 +237,6 @@ void manejoDeConsola() {
 	}
 }
 
-//TODO No envia bien el mensaje - ARREGLAR -
 void correrProceso(char* path) {
 	
 	//TODO Ver una mejor forma de crear el PCB 
@@ -275,15 +244,13 @@ void correrProceso(char* path) {
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
-	send(clienteCPU, path, sizeof(path), 0);
 
 }
-
 
 void generarPCB(pcb_t* pcb){
 
 	pcb->processID = pIDContador;
-	pcb->pCrogramCounter = 0;
+	pcb->programCounter = 0;
 	//El estado se asigna a Ready
 	pcb->estadoProceso = 0;
 
@@ -292,11 +259,13 @@ void generarPCB(pcb_t* pcb){
 
 	pIDContador++;
 	
-	log_info(archivoLog, "Se genero el PCB del proceso %i", pcb->processID);
+	log_info(archivoLog, "Se genero el PCB del proceso %i.", pcb->processID);
 
 }
 
 void finalizarProceso(char* pid){
+
+
 
 }
 
@@ -331,4 +300,42 @@ char* serializarOperandos(t_Package *package) {
 
 void planificador() {
 
+	log_info(archivoLog, "Empieza el thread planificador.\n");
+	//Meto la cpu que se conecta a la cola de libres
+	queue_push(queueCPULibre, &clienteCPU);
+
+	if (! queue_is_empty(queueCPULibre)){
+
+		pcb_t *auxPCB = queue_pop(queueReady);
+		int *auxCPU = queue_pop(queueCPULibre);
+		queue_push(queueRunning, auxPCB);
+		queue_push(queueCPU, auxCPU);
+
+	}
+
+	int* estadoCPU = malloc(sizeof(int));
+	recv(clienteCPU, estadoCPU, sizeof(int), 0);
+
+//switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
+
+	switch(*estadoCPU){
+		case FINISH:
+			finalizarProceso(pid);
+			queue_pop(queueRunning);
+			int *auxCPU = queue_pop(queueCPU);
+			queue_push(queueCPULibre, auxCPU);
+			free(estadoCPU);
+			break;
+//TODO cuando va a block asignarle nuevo proceso a la cpu libre, lo comento porque en primer linea de quantum da error de label (?)
+		case QUANTUM:
+			pcb_t *auxPCB = queue_pop(queueRunning);
+			queue_push(queueBlocked, auxCPU );
+			int *auxCPU = queue_pop(queueCPU);
+			queue_push(queueCPULibre, auxCPU);
+			free(estadoCPU);
+			break;
+	}
+
+
 }
+
