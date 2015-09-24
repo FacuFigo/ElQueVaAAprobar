@@ -90,6 +90,8 @@ void finalizarProceso(char* pid);
 void estadoProcesos();
 void comandoCPU();
 
+int buscarEnCola(t_queue* cola, char* pid);
+
 int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
@@ -239,8 +241,6 @@ void manejoDeConsola() {
 
 void correrProceso(char* path) {
 	
-	//TODO Ver una mejor forma de crear el PCB 
-	//o crear una estructura para control que no sean las queue del planificador
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
@@ -265,8 +265,47 @@ void generarPCB(pcb_t* pcb){
 
 void finalizarProceso(char* pid){
 
+	if(buscarEnCola(queueReady, pid) == -1)
+		if(buscarEnCola(queueRunning, pid) == -1)
+			if(buscarEnCola(queueBlocked, pid) == -1)
+				log_error(archivoLog, "No se pudo finalizar el proceso %s", pid);
 
+}
 
+//¿Una mejor forma seria que devuelva el pcb encontrado y lo elimino fuera?
+int buscarEnCola(t_queue* cola, char* pid){
+
+	pcb_t* pcb = malloc(sizeof(pcb_t));
+	t_queue* queueAuxiliar = queue_create();
+	int encontrado = 0;
+
+	//Busco en la queue que viene por parametro, si se encuentra lo elimina y marca el flag como encontrado
+	while(!queue_is_empty(cola)){
+
+		pcb = queue_pop(cola);
+		//TODO Encontrar la forma de comparar el int con el pID del comando
+		if(pcb->processID == pid){
+			//Enviar al CPU la peticion de eliminar
+			//Recibir la confirmacion de que se pudo eliminar
+			log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
+			free(pcb);
+			encontrado++;
+			break;
+		}else{
+			queue_push(queueAuxiliar, pcb);
+		}
+
+	}
+
+	while(!queue_is_empty(queueAuxiliar)){
+		pcb = queue_pop(queueAuxiliar);
+		queue_push(cola, pcb);
+	}
+
+	if(encontrado)
+		return 0;
+	else
+		return -1;
 }
 
 void estadoProcesos(){

@@ -53,23 +53,24 @@ typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int recieve_and_deserialize(t_Package *package, int socketCliente);
+void configurarHilo(t_hilo hiloCPU);
 void ejecutarmProc(char* ruta);
 char* iniciarmProc(char* comando);
 char* leermProc(char* comando);
 char* escribirmProc(char* comando);
 char* entradaSalidamProc(char* comando);
 char* finalizarmProc(char* comando);
-void simulacionCPUs(char* path);
+
 
 int main(int argc, char** argv) {
 
-
+	//Creo el archivo de logs
 	archivoLog = log_create("log_CPU", "CPU", 1, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
 
 	configurarCPU(argv[1]);
 
-
+	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlanificador))
 		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlanificador);
 	else
@@ -83,7 +84,7 @@ int main(int argc, char** argv) {
 
 	char* mCod = malloc(15);
 
-	recv(socketPlanificador, mCod, 15, 0);  //recibiria path y puntero a prox instrucc  junto
+	recv(socketPlanificador, mCod, 15, 0);
 	log_info(archivoLog, "Recibi %s", mCod);
 
 
@@ -108,7 +109,19 @@ int main(int argc, char** argv) {
 	free(notificacion);
 
 
+	// Por ahora pruebo con un solo hilo para el Checkpoint
 
+	t_hilo hilo1;
+
+	char* path= malloc (30);
+	char* instruccionSiguiente= malloc(20);
+	recv(socketPlanificador, path, 30, 0);
+	recv(socketPlanificador, instruccionSiguiente, 20, 0);
+
+	configurarHilo(hilo1);
+
+
+    free (path);
 
 
 
@@ -159,17 +172,6 @@ void configurarCPU(char* config) {
 	config_destroy(configCPU);
 }
 
-
-void simulacionCPUs(char* path){
-	int i;
-	for(i=0; i<=cantidadHilos; i++){
-			pthread_create(&hilos[i], NULL, (void *) ejecutarmProc, path);
-			unsigned int id=process_get_thread_id();
-			log_info(archivoLog,"Instancia CPU %d creada",id);
-		}
-}
-
-
 int configurarSocketCliente(char* ip, int puerto, int* s) {
 	struct sockaddr_in direccionServidor;
 	direccionServidor.sin_family = AF_INET;
@@ -205,6 +207,12 @@ int recieve_and_deserialize(t_Package *package, int socketCliente) {
 
 
 
+configurarHilo(t_hilo hiloCPU){
+	pthread_create(&hiloCPU.hilo, NULL, (void *) ejecutarmProc, NULL);
+    hiloCPU.id= process_get_thread_id;
+
+    log_info(archivoLog, "Instancia de cpu: %d creada", hiloCPU.id);
+}
 
 
 void ejecutarmProc(char* path){
@@ -243,16 +251,11 @@ void ejecutarmProc(char* path){
   free(comandoSplit);
   free(instruccion);
   free(comando);
-  fclose(mCod);
+  fclose(fp);
 
 
 }
 
 
-
-//funcion para asignar mCod al hilo que me diga el planificador
- asignarmCodHilo(){
-
- }
 
 

@@ -65,21 +65,22 @@ int main(int argc, char** argv) {
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
-	char* comando = string_from_format("sudo dd if=/dev/sda1 of=/home/utnso/Swap bs=%i count=%i", tamanioArchivoSwap);
+	char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
 
 	if(system(comando) == -1)
-		log_info(archivoLog, "No se pudo crear el archivo de Swap.\n");
+		log_error(archivoLog, "No se pudo crear el archivo de Swap.\n");
 	else
 		log_info(archivoLog, "Se creó el archivo de Swap.\n");
 
 	//Abro e inicializo el archivo con "\0"
 	FILE* archivoSwap;
-
-	archivoSwap = fopen("archivoSwap", "r+");
+	archivoSwap = fopen(nombreSwap, "r+");
 
 	while(!feof(archivoSwap)){
 		fputc('\0',archivoSwap);
 	}
+
+//TODO Algoritmo de manejo de Swap
 
 //CHECKPOINT 1
 	char* mCod = malloc(15);
@@ -103,10 +104,11 @@ int main(int argc, char** argv) {
 
 void configurarAdmSwap(char* config) {
 	t_config* configurarAdmSwap = config_create(config);
-	if (config_has_property(configurarAdmSwap, "NOMBRE_SWAP"))
-		nombreSwap = string_duplicate(config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP"));
+
 	if (config_has_property(configurarAdmSwap, "PUERTO_ESCUCHA"))
 		puertoEscucha = config_get_int_value(configurarAdmSwap,	"PUERTO_ESCUCHA");
+	if (config_has_property(configurarAdmSwap, "NOMBRE_SWAP"))
+		nombreSwap = string_duplicate(config_get_string_value(configurarAdmSwap, "NOMBRE_SWAP"));
 	if (config_has_property(configurarAdmSwap, "CANTIDAD_PAGINAS"))
 		cantidadPaginas = config_get_int_value(configurarAdmSwap, "CANTIDAD_PAGINAS");
 	if (config_has_property(configurarAdmSwap, "TAMANIO_PAGINA"))
