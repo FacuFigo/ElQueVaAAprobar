@@ -52,7 +52,8 @@ int pIDContador = 1;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
-typedef enum {FINISH, QUANTUM} estadoCPU_t; //el cpu avisa si termino la rafaga (FIFO) o quantum(RR)
+typedef enum {RAFAGA, BLOQUEAR} formaFinalizacion_t;
+//typedef enum {RAFAGA, QUANTUM, BLOQUEADO} estadoCPU_t; //el cpu avisa si termino la rafaga (FIFO) o quantum(RR)
 
 typedef struct {
 	char* comando;
@@ -91,7 +92,9 @@ void finalizarProceso(char* pid);
 void estadoProcesos();
 void comandoCPU();
 
+//Funciones de planificador
 int buscarEnCola(t_queue* cola, char* pid);
+void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino);
 
 int main(int argc, char** argv) {
 
@@ -270,13 +273,20 @@ void generarPCB(pcb_t* pcb){
 
 }
 
+//TODO Esto es horrible, mejorar
 void finalizarProceso(char* pid){
 
-	if(buscarEnCola(queueReady, pid) == -1)
+	if(buscarEnCola(queueReady, pid) == -1){
 		if(buscarEnCola(queueRunning, pid) == -1)
 			if(buscarEnCola(queueBlocked, pid) == -1)
 				log_error(archivoLog, "No se pudo finalizar el proceso %s", pid);
-
+			else
+				log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
+		else
+			log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
+	}else{
+		log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
+	}
 }
 
 //¿Una mejor forma seria que devuelva el pcb encontrado y lo elimino fuera?
@@ -344,6 +354,7 @@ char* serializarOperandos(t_Package *package) {
 	return serializedPackage;
 }
 
+//TODO COLOCAR LOS SEMAFOROS PARA CUIDAR LAS QUEUE
 void planificadorFIFO() {
 
 	log_info(archivoLog, "Empieza el thread planificador.\n");
@@ -362,18 +373,58 @@ void planificadorFIFO() {
 			queue_push(queueCPU, auxCPU);
 			queue_push(queueRunning, auxPCB);
 
-
-
 //TODO mandarle al cpu el pid del proceso que va a correr
-//switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
+//Esperar por la respuesta del CPU que va a mandar si termina el proceso o si sigue - Se bloquea o finaliza normal -
+//Esto se va a saber por protocolos en los que hay que ponerse de acuerdo
 
-			finalizarProceso(auxPCB->processID);
+			if(procesoContinua){
+				switch(*formaDeFinalizacion){
+				case RAFAGA:
+					finalizarRafaga(auxPCB, queueReady);
+					log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
+					break;
+				case BLOQUEAR:
+					finalizarRafaga(auxPCB, queueBlocked);
+					log_info(archivoLog, "Se bloquea el proceso %i.\n", auxPCB->processID);
+					break;
+				}
+			} else {
+				finalizarProceso(auxPCB->processID);
+				log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
+			}
+
+			//Libero la CPU
 			auxCPU	= queue_pop(queueCPU);
 			queue_push(queueCPULibre, auxCPU);
 
 		}
 	}
 	free(auxCPU);
+}
+
+//Al finalizar la rafaga de ejecucion se pone en la colaDestino dependiendo del estado del proceso en ese momento
+void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
+
+	pcb_t* aux = malloc(sizeof(pcb_t));
+	t_queue* queueAux = malloc(sizeof(t_queue));
+
+	while(!queue_is_empty(queueRunning)){
+		aux = queue_pop(queueRunning);
+		if(pcb->processID == aux->processID){
+			queue_push(colaDestino, pcb);
+			break;
+		} else {
+			queue_push(queueAux, aux);
+		}
+	}
+
+	while(!queue_is_empty(queueAux)){
+		aux = queue_pop(queueAux);
+		queue_push(queueRunning, aux);
+	}
+
+	free(queueAux);
+	free(aux);
 }
 
 void planificadorRR() {
