@@ -155,20 +155,20 @@ int main(int argc, char** argv) {
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
-	//Comienza el thread del planificadorFIFO
-	pthread_t hiloPlanificadorFIFO;
-	pthread_create(&hiloPlanificadorFIFO, NULL, (void *) planificadorFIFO, NULL);
+	if(algoritmo == "FIFO"){
+		//Comienza el thread del planificadorFIFO
+		pthread_t hiloPlanificadorFIFO;
+		pthread_create(&hiloPlanificadorFIFO, NULL, (void *) planificadorFIFO, NULL);
+		pthread_join(hiloPlanificadorFIFO, NULL);
+	}else{
+		//Comienza el thread del planificadorRR
+		pthread_t hiloPlanificadorRR;
+		pthread_create(&hiloPlanificadorRR, NULL, (void *) planificadorRR, NULL);
+		pthread_join(hiloPlanificadorRR, NULL);
+	}
 
-	//Comienza el thread del planificadorRR
-	pthread_t hiloPlanificadorRR;
-	pthread_create(&hiloPlanificadorRR, NULL, (void *) planificadorRR, NULL);
-
-	pthread_join(hiloPlanificadorFIFO, NULL);
 	pthread_join(hiloConsola, NULL);
-	pthread_join(hiloPlanificadorRR, NULL);
-
 	return 0;
-
 }
 
 void configurarPlanificador(char* config) {
@@ -390,7 +390,7 @@ void planificadorFIFO() {
 				}
 			} else {
 				finalizarProceso(auxPCB->processID);
-				log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
+
 			}
 
 			//Libero la CPU
