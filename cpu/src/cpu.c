@@ -38,7 +38,7 @@ int cantidadHilos;
 int retardo;
 int socketPlanificador;
 int socketMemoria;
-pthread_t hilos[cantidadHilos];
+pthread_t hilo1;
 
 typedef struct _t_Package {
 	char message[100];
@@ -53,13 +53,12 @@ typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int recieve_and_deserialize(t_Package *package, int socketCliente);
-void configurarHilo(t_hilo hiloCPU);
 void ejecutarmProc(char* ruta);
 char* iniciarmProc(char* comando);
 char* leermProc(char* comando);
 char* escribirmProc(char* comando);
 char* entradaSalidamProc(char* comando);
-char* finalizarmProc(char* comando);
+char* finalizarmProc();
 
 
 int main(int argc, char** argv) {
@@ -88,15 +87,6 @@ int main(int argc, char** argv) {
 	log_info(archivoLog, "Recibi %s", mCod);
 
 
-
-	char* path= malloc (30);
-
-	simulacionCPUs(path);
-
-	pthread_t hiloAdmin;
-	pthread_create(&hiloAdmin, NULL, (void *) asignarmCodHilo, path);
-
-
 	send(socketMemoria, mCod, 15, 0);
 
 	char* notificacion = malloc(11);
@@ -111,17 +101,10 @@ int main(int argc, char** argv) {
 
 	// Por ahora pruebo con un solo hilo para el Checkpoint
 
-	t_hilo hilo1;
-
-	char* path= malloc (30);
-	char* instruccionSiguiente= malloc(20);
-	recv(socketPlanificador, path, 30, 0);
-	recv(socketPlanificador, instruccionSiguiente, 20, 0);
-
-	configurarHilo(hilo1);
+    pthread_create(&hilo1, NULL, (void *)ejecutarmProc, mCod);
 
 
-    free (path);
+
 
 
 
@@ -207,19 +190,13 @@ int recieve_and_deserialize(t_Package *package, int socketCliente) {
 
 
 
-configurarHilo(t_hilo hiloCPU){
-	pthread_create(&hiloCPU.hilo, NULL, (void *) ejecutarmProc, NULL);
-    hiloCPU.id= process_get_thread_id;
-
-    log_info(archivoLog, "Instancia de cpu: %d creada", hiloCPU.id);
-}
-
-
 void ejecutarmProc(char* path){
 	FILE* mCod;
 	char* comando= malloc(20);
 	char* instruccion= malloc(10);
     char** comandoSplit= malloc(sizeof (char*)*3);
+    char** resultadosRafaga= malloc(50);
+    int i=0;
 
 	mCod= fopen(path, "r");
 	while (fgets(comando, 20, mCod) != NULL) {
@@ -229,33 +206,63 @@ void ejecutarmProc(char* path){
 
 		   switch(instruccion){
 		   case iniciar:
-			   iniciarmProc(comando);
+			   resultadosRafaga[i]= iniciarmProc(comando);
 			   break;
 		   case leer:
-			   leermProc(comando);
+			   resultadosRafaga[i]= leermProc(comando);
 			   break;
 		   case escribir:
-		       escribirmProc(comando);
+			   resultadosRafaga[i]= escribirmProc(comando);
 		       break;
 		   case entradaSalida:
-			   entradaSalidamProc(comando);
+			   resultadosRafaga[i]= entradaSalidamProc(comando);
 			   break;
 		   case finalizar:
-			   finalizarmProc();
+			   resultadosRafaga[i]= finalizarmProc();
 			   break;
 		}
-
+           i++;
 		   sleep(retardo);
 	}
 
+  liberarPunterosDobles(comandoSplit, 3);
   free(comandoSplit);
   free(instruccion);
   free(comando);
-  fclose(fp);
+  fclose(mCod);
 
+  send(socketPlanificador, resultadosRafaga, 50, 0);
+  liberarPunterosDobles(resultadosRafaga, i);
+  free(resultadosRafaga);
+
+}
+
+char* iniciarmProc(char* comando){
+	char* resultado = malloc(15);
+	send(socketMemoria, comando, 20, 0);
+    recv(socketMemoria, resultado, 11, 0);
+    return resultado;
+    free(resultado);
+}
+
+char* finalizarmProc(){
+	char* resultado = malloc(15);
+	char* avisoMemoria=malloc(sizeof (char) * 30);
+
+	strcpy(avisoMemoria, "Finalizar proceso PID");
+	send(socketMemoria, avisoMemoria, 30, 0);
+	 recv(socketMemoria, resultado, 11, 0);
+	 free(avisoMemoria);
+
+	 return resultado;
+	 free(resultado);
 
 }
 
 
-
+liberarPuntrosDobles(char** puntero, int ultimo){
+	int i;
+	for(i=0; i<= ultimo; i++)
+		free(puntero[i]);
+}
 

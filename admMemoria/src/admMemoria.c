@@ -50,7 +50,8 @@ int clienteCPU;
 void configurarAdmMemoria(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int configurarSocketServidor();
-
+int** iniciarmProc(int cantPaginas);
+finalizarmProc(int** tablaPaginas);
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -168,21 +169,48 @@ int configurarSocketServidor() {
 int** iniciarmProc(int cantPaginas){
 	int** tablaAux=malloc(sizeof(int)*cantPaginas);
 	char* notificacion=malloc(sizeof(char)*20);
+	char* avisoSwap= malloc(40);
 	if (tablaAux== NULL){
-		notificacion="mProc PID - Fallo";
+		strcpy(notificacion, "mProc PID - Fallo");
 		send(clienteCPU, notificacion, sizeof(char)*20, 0);
 	}
 	else{
-		notificacion="mProc PID - Iniciado";
+		strcpy(notificacion, "mProc PID - Iniciado");
 				send(clienteCPU, notificacion, sizeof(char)*20, 0);
 				log_info(archivoLog, "Proceso mProc PID creado con %d paginas asignadas",cantPaginas);
 	}
+
+	strcpy(avisoSwap, "Se creo proceso PID con %d paginas",cantPaginas);
+	send(socketSwap, avisoSwap, 40, 0);
+	free(avisoSwap);
+	free(notificacion);
 	return tablaAux;
+	liberarTabla(tablaAux,cantPaginas);
+	free(tablaAux);
 }
 
+finalizarmProc(int** tablaPaginas){   //quizas tambien limpie TLB
+	char* avisoSwap=malloc(40);
+	char avisoCPU=malloc(sizeof(char)*20);
+	free(tablaPaginas);
+	strcpy(avisoSwap, "Proceso PID finalizado");
+	send(socketSwap, avisoSwap, 40, 0);
+	strcpy(avisoCPU, "mProc PID finalizado");
+	send(clienteCPU, avisoCPU, 20, 0);
 
+	free(avisoSwap);
+	free(avisoCPU);
+}
 
 
 leermProc(int nroPagina){
 
 }
+
+
+ liberarTabla(int** tabla, int cantPaginas){
+	 int i;
+	 for (i=0; i<=cantPaginas; i++)
+		 free(tabla[i]);
+
+ }
