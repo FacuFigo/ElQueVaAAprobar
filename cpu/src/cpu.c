@@ -54,11 +54,11 @@ void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int recieve_and_deserialize(t_Package *package, int socketCliente);
 void ejecutarmProc(char* ruta);
-char* iniciarmProc(char* comando);
-char* leermProc(char* comando);
-char* escribirmProc(char* comando);
-char* entradaSalidamProc(char* comando);
-char* finalizarmProc();
+iniciarmProc(char* comando);
+leermProc(char* comando);
+escribirmProc(char* comando);
+entradaSalidamProc(char* comando);
+finalizarmProc();
 
 
 int main(int argc, char** argv) {
@@ -192,11 +192,11 @@ int recieve_and_deserialize(t_Package *package, int socketCliente) {
 
 void ejecutarmProc(char* path){
 	FILE* mCod;
+	char* resultadosTot= malloc(100);
 	char* comando= malloc(20);
 	char* instruccion= malloc(10);
     char** comandoSplit= malloc(sizeof (char*)*3);
-    char** resultadosRafaga= malloc(50);
-    int i=0;
+
 
 	mCod= fopen(path, "r");
 	while (fgets(comando, 20, mCod) != NULL) {
@@ -206,22 +206,28 @@ void ejecutarmProc(char* path){
 
 		   switch(instruccion){
 		   case iniciar:
-			   resultadosRafaga[i]= iniciarmProc(comando);
+			    iniciarmProc(comando);
+			    char* resultado=malloc(20);
+			    recv(socketMemoria, resultado, 20, 0);
+			    string_append_with_format(&resultadosTot, "%s!", resultado);
 			   break;
 		   case leer:
-			   resultadosRafaga[i]= leermProc(comando);
+			   leermProc(comando);
 			   break;
 		   case escribir:
-			   resultadosRafaga[i]= escribirmProc(comando);
+			   escribirmProc(comando);
 		       break;
 		   case entradaSalida:
-			   resultadosRafaga[i]= entradaSalidamProc(comando);
+			   entradaSalidamProc(comando);
 			   break;
 		   case finalizar:
-			   resultadosRafaga[i]= finalizarmProc();
+			   finalizarmProc();
+			   char* resultado=malloc(20);
+			   recv(socketMemoria, resultado, 20, 0);
+			   string_append_with_format(&resultadosTot, "%s!", resultado);
 			   break;
 		}
-           i++;
+
 		   sleep(retardo);
 	}
 
@@ -231,31 +237,26 @@ void ejecutarmProc(char* path){
   free(comando);
   fclose(mCod);
 
-  send(socketPlanificador, resultadosRafaga, 50, 0);
-  liberarPunterosDobles(resultadosRafaga, i);
-  free(resultadosRafaga);
+  send(socketPlanificador, resultadosTot, 100, 0);
+  free(resultadosTot);
 
 }
 
-char* iniciarmProc(char* comando){
-	char* resultado = malloc(15);
+iniciarmProc(char* comando){
 	send(socketMemoria, comando, 20, 0);
-    recv(socketMemoria, resultado, 11, 0);
-    return resultado;
-    free(resultado);
 }
 
-char* finalizarmProc(){
-	char* resultado = malloc(15);
+finalizarmProc(){
 	char* avisoMemoria=malloc(sizeof (char) * 30);
-
 	strcpy(avisoMemoria, "Finalizar proceso PID");
 	send(socketMemoria, avisoMemoria, 30, 0);
-	 recv(socketMemoria, resultado, 11, 0);
 	 free(avisoMemoria);
 
-	 return resultado;
-	 free(resultado);
+}
+
+
+leermProc(char* comando){
+	send(socketMemoria, comando, 20, 0);
 
 }
 
