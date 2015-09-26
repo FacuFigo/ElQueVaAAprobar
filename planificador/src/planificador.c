@@ -80,6 +80,7 @@ int configurarSocketServidor();
 void manejoDeConsola();
 void planificadorFIFO();
 void planificadorRR();
+void controlTiempo();
 
 //Funciones de sockets
 char* serializarOperandos(t_Package *package);
@@ -360,6 +361,9 @@ void planificadorFIFO() {
 	log_info(archivoLog, "Empieza el thread planificador.\n");
 
 	int* auxCPU = malloc(sizeof(int));
+	//Comienza el thread de control de tiempo
+	pthread_t hiloControlTiempo;
+	pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
 
 	while(1){
 
@@ -372,6 +376,7 @@ void planificadorFIFO() {
 			auxPCB->estadoProceso = 1;
 			queue_push(queueCPU, auxCPU);
 			queue_push(queueRunning, auxPCB);
+			log_info(archivoLog, "Empieza la ejecución de ");
 
 //TODO mandarle al cpu el pid del proceso que va a correr
 //Esperar por la respuesta del CPU que va a mandar si termina el proceso o si sigue - Se bloquea o finaliza normal -
@@ -429,49 +434,16 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 
 void planificadorRR() {
 
-/*	log_info(archivoLog, "Empieza el thread planificador.\n");
-	//Meto la cpu que se conecta a la cola de libres
-	queue_push(queueCPULibre, &clienteCPU);
-
-	if (! queue_is_empty(queueCPULibre)){
-
-		pcb_t *auxPCB = queue_pop(queueReady);
-		int *auxCPU = queue_pop(queueCPULibre);
-		queue_push(queueRunning, auxPCB);
-		queue_push(queueCPU, auxCPU);
-
-	}
-
-	int* estadoCPU = malloc(sizeof(int));
-	recv(clienteCPU, estadoCPU, sizeof(int), 0);
-
-//switch enum me va a llegar notificacion del cpu de que termino y lo mando a block o finish
-
-	switch(*estadoCPU){
-		case FINISH:
-			finalizarProceso(pid);
-
-			queue_pop(queueRunning);
-			int *auxCPU = queue_pop(queueCPU);
-			queue_push(queueCPULibre, auxCPU);
-
-			free(estadoCPU);
-			break;
-//TODO cuando va a block asignarle nuevo proceso a la cpu libre, lo comento porque en primer linea de quantum da error de label (?)
-		case QUANTUM:
-			bloquearProceso();
-
-			free(estadoCPU);
-			break;
-	}
-*/
 }
 
-void bloquearProceso(){
-/*
-	pcb_t *auxPCB = queue_pop(queueRunning);
-				queue_push(queueBlocked, auxCPU );
-				int *auxCPU = queue_pop(queueCPU);
-				queue_push(queueCPULibre, auxCPU);
-*/
+
+
+void controlarTiempoBlock(){
+	//TODO VER TEMA CONTROL TIEMPO
+
+		int* tiempoBlock = malloc(sizeof(int));
+		pcb_t* auxPCB = malloc(sizeof(pcb_t));
+
+
+
 }
