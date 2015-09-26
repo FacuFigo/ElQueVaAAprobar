@@ -47,6 +47,8 @@ int retardoMemoria;
 int socketSwap;
 int clienteCPU;
 
+typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
+
 void configurarAdmMemoria(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int configurarSocketServidor();
@@ -76,6 +78,28 @@ int main(int argc, char** argv) {
 	char* mCod = malloc(15);
 	recv(clienteCPU, mCod, 15, 0);
 	log_info(archivoLog, "Recibi %s", mCod);
+
+
+
+	int** tablaDePaginas;
+	char* instruccion=malloc(15);
+	char** instruccionSplit=malloc(20);
+	instruccionSplit= string_split(mCod, " ");
+	instruccion= instruccionSplit[0];
+
+
+	switch(instruccion){
+	case iniciar:
+		iniciarmProc(&tablaDePaginas, instruccionSplit[1]);
+		break;
+	case leer:
+		leermProc(mCod);
+		break;
+	case finalizar:
+		finalizarmProc(&tablaDePaginas);
+		break;
+
+	}
 
 
 
@@ -166,11 +190,11 @@ int configurarSocketServidor() {
 }
 
 
-int** iniciarmProc(int cantPaginas){
-	int** tablaAux=malloc(sizeof(int)*cantPaginas);
+ iniciarmProc(int** tabla, int cantPaginas){
+    tabla=malloc(sizeof(int)*cantPaginas);
 	char* notificacion=malloc(sizeof(char)*20);
 	char* avisoSwap= malloc(40);
-	if (tablaAux== NULL){
+	if (tabla== NULL){
 		strcpy(notificacion, "mProc PID - Fallo");
 		send(clienteCPU, notificacion, sizeof(char)*20, 0);
 	}
@@ -184,15 +208,13 @@ int** iniciarmProc(int cantPaginas){
 	send(socketSwap, avisoSwap, 40, 0);
 	free(avisoSwap);
 	free(notificacion);
-	return tablaAux;
-	liberarTabla(tablaAux,cantPaginas);
-	free(tablaAux);
 }
 
-finalizarmProc(int** tablaPaginas){   //quizas tambien limpie TLB
+
+finalizarmProc(int** tablaPaginas){   //quizas tambien limpie la TLB, no decidi que tipo de estructura hacer
 	char* avisoSwap=malloc(40);
 	char avisoCPU=malloc(sizeof(char)*20);
-	free(tablaPaginas);
+	liberarTabla(tablaPaginas);
 	strcpy(avisoSwap, "Proceso PID finalizado");
 	send(socketSwap, avisoSwap, 40, 0);
 	strcpy(avisoCPU, "mProc PID finalizado");
@@ -203,14 +225,16 @@ finalizarmProc(int** tablaPaginas){   //quizas tambien limpie TLB
 }
 
 
-leermProc(int nroPagina){
+leermProc(char* instruccion){
+	send(socketSwap, instruccion, 15, 0);
 
 }
 
 
- liberarTabla(int** tabla, int cantPaginas){
-	 int i;
-	 for (i=0; i<=cantPaginas; i++)
+ liberarTabla(int** tabla, int cantPagina){
+	 int i=0;
+	 while(tabla[i]!= '/0')
 		 free(tabla[i]);
+	 free(tabla);
 
  }

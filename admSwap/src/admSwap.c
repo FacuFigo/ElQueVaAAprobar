@@ -31,6 +31,11 @@
 
 #define BACKLOG 5
 
+typedef struct {
+	int processID;
+	int cantidadDePaginas;
+} process_t;
+
 t_log* archivoLog;
 char* ipAdmMemoria;
 char* puertoAdmMemoria;
@@ -42,9 +47,17 @@ int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
 int clienteMemoria;
 
+t_list* listaGestionEspacios;
+
+FILE* archivoSwap;
+
 //Funciones de configuración
 void configurarAdmSwap(char* config);
 int configurarSocketServidor();
+
+//Funciones de gestion de espacios de memoria
+int buscarEspacioDisponible(int espacioNecesario);
+void asignarEspacio(int byteInicio, int espacioTotal);
 
 int main(int argc, char** argv) {
 
@@ -73,15 +86,35 @@ int main(int argc, char** argv) {
 		log_info(archivoLog, "Se creó el archivo de Swap.\n");
 
 	//Abro e inicializo el archivo con "\0"
-	FILE* archivoSwap;
 	archivoSwap = fopen(nombreSwap, "r+");
 
 	while(!feof(archivoSwap)){
 		fputc('\0',archivoSwap);
 	}
 
-//TODO Algoritmo de manejo de Swap
+	listaGestionEspacios = list_create();
 
+//TODO Dividir funcionalidades por threads
+	//Cuando llega un proceso hay que añadirlo a la lista y despues escribir la cantidad de bytes en el archivo.
+	//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
+	process_t* proceso = malloc(sizeof(process_t));
+
+	recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
+	recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
+
+	//Buscar la cantidad de paginas necesarias para cargar el proceso
+	int* espacioTotal = malloc(sizeof(int));
+	*espacioTotal = proceso->cantidadDePaginas * tamanioPagina;
+
+	int byteInicialEspacio = buscarEspacioDisponible(*espacioTotal);
+
+	//Se graba 1 a partir del byte inicial
+	asignarEspacio(byteInicialEspacio, *espacioTotal);
+
+	//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
+
+
+/*
 //CHECKPOINT 1
 	char* mCod = malloc(15);
 	recv(clienteMemoria, mCod, 15, 0);
@@ -98,8 +131,9 @@ int main(int argc, char** argv) {
 
 	free(mProc);
 	free(mCod);
-	return 0;
+*/
 
+	return 0;
 }
 
 void configurarAdmSwap(char* config) {
@@ -145,3 +179,63 @@ int configurarSocketServidor() {
 	return 1;
 }
 
+//Si encontro el espacio, devuelve el byte en donde comienza el espacio, sino devuelve -1
+int buscarEspacioDisponible(int espacioNecesario){
+
+	int espacioEncontrado = 0;
+
+	//Caracter leido del archivo
+	int leido;
+	//Inicio y fin del espacio leido
+	int inicioEspacio = 0;
+	int finalEspacio = 0;
+	//Espacio total leido (espacio = finalEspacio - inicioEspacio)
+	int espacio = 0;
+
+	leido = fgetc(archivoSwap);
+
+	while(!(espacioEncontrado && !feof(archivoSwap))){
+
+		if(leido == 0){
+			finalEspacio++;
+		} else {
+			espacio = finalEspacio - inicioEspacio;
+
+			if(espacioNecesario == espacio)
+				espacioEncontrado++;
+			else{
+				do {
+					leido = fgetc(archivoSwap);
+				} while (leido == 1);
+			}
+		}
+
+		if(espacioEncontrado)
+			//Si se encontro el espacio, se devuelve desde donde empieza
+			return inicioEspacio;
+		else
+			fgetc(archivoSwap);
+	}
+
+	return -1;
+}
+
+void asignarEspacio(int byteInicio, int espacioTotal){
+
+	char* bytesLeidos = malloc(byteInicio - 1);
+	int espacioEscrito = 0;
+	int terminoEscritura = 0;
+
+	fgets(bytesLeidos, byteInicio, archivoSwap);
+
+	free(bytesLeidos);
+
+	while(terminoEscritura){
+		if(espacioEscrito <= espacioTotal){
+			fputc(1, archivoSwap);
+			espacioEscrito++;
+		}else{
+			terminoEscritura++;
+		}
+	}
+}
