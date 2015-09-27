@@ -38,6 +38,7 @@ int cantidadHilos;
 int retardo;
 int socketPlanificador;
 int socketMemoria;
+int programCounter;
 pthread_t hilo1;
 
 typedef struct _t_Package {
@@ -288,3 +289,4 @@ void asignarmCodHilo(char* path, int programCounter) {
 	} else {
 		//avisar interrupcion al plani
 	}
+}
