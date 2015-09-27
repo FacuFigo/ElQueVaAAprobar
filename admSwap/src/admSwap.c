@@ -31,10 +31,21 @@
 
 #define BACKLOG 5
 
+//Recepcion de info de Memoria
 typedef struct {
 	int processID;
 	int cantidadDePaginas;
 } process_t;
+
+//Struct que va dentro de la lista
+typedef struct {
+	int numeroPagina;
+	int disponibilidad;
+	int proceso;
+} pagina_t;
+
+
+typedef enum {NUEVOPROCESO, BUSCARPAGINA} procedimiento_t;
 
 t_log* archivoLog;
 char* ipAdmMemoria;
@@ -56,8 +67,10 @@ void configurarAdmSwap(char* config);
 int configurarSocketServidor();
 
 //Funciones de gestion de espacios de memoria
+void admDeEspacios();
 int buscarEspacioDisponible(int espacioNecesario);
-void asignarEspacio(int byteInicio, int espacioTotal);
+void asignarEspacio(int paginaInicio, process_t* proceso);
+void buscarPaginas();
 
 int main(int argc, char** argv) {
 
@@ -92,46 +105,27 @@ int main(int argc, char** argv) {
 		fputc('\0',archivoSwap);
 	}
 
+	//Creo la lista para la gestion de los espacios vacios
 	listaGestionEspacios = list_create();
+	int i;
+	for(i = 0; i < cantidadPaginas; i++){
+		pagina_t* pagina = malloc(sizeof(pagina_t));
+		pagina->numeroPagina = i;
+		pagina->disponibilidad = 1;
+		list_add(listaGestionEspacios, pagina);
+		free(pagina);
+	}
 
-//TODO Dividir funcionalidades por threads
-	//Cuando llega un proceso hay que añadirlo a la lista y despues escribir la cantidad de bytes en el archivo.
-	//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
-	process_t* proceso = malloc(sizeof(process_t));
+	//Thread que gestiona los espacios en la lista de gestion
+	pthread_t admDeEspacio;
+	pthread_create(&admDeEspacio, NULL, (void *) admDeEspacios, NULL);
 
-	recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
-	recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
+	//Thread que busca las paginas solicitadas por memoria
+	pthread_t buscadorDePaginas;
+	pthread_create(&buscadorDePaginas, NULL, (void *) buscarPaginas, NULL);
 
-	//Buscar la cantidad de paginas necesarias para cargar el proceso
-	int* espacioTotal = malloc(sizeof(int));
-	*espacioTotal = proceso->cantidadDePaginas * tamanioPagina;
-
-	int byteInicialEspacio = buscarEspacioDisponible(*espacioTotal);
-
-	//Se graba 1 a partir del byte inicial
-	asignarEspacio(byteInicialEspacio, *espacioTotal);
-
-	//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
-
-
-/*
-//CHECKPOINT 1
-	char* mCod = malloc(15);
-	recv(clienteMemoria, mCod, 15, 0);
-	log_info(archivoLog, "Recibí %s", mCod);
-
-	char* notificacion = "Recibido.";
-	send(clienteMemoria, notificacion, strlen(notificacion), 0);
-	log_info(archivoLog, "%s", notificacion);
-
-// Recibe el mProc de Memoria
-	char* mProc = malloc(15);
-	recv(clienteMemoria, mProc, 15, 0);
-	log_info(archivoLog, "Recibí %s", mProc);
-
-	free(mProc);
-	free(mCod);
-*/
+	pthread_join(admDeEspacio, NULL);
+	pthread_join(buscadorDePaginas, NULL);
 
 	return 0;
 }
@@ -179,63 +173,101 @@ int configurarSocketServidor() {
 	return 1;
 }
 
-//Si encontro el espacio, devuelve el byte en donde comienza el espacio, sino devuelve -1
-int buscarEspacioDisponible(int espacioNecesario){
+void admDeEspacios(){
+	//Cuando llega un NUEVO PROCESO hay que añadirlo a la lista
+	process_t* proceso = malloc(sizeof(process_t));
+	int paginaInicio = 0;
+	procedimiento_t procedimiento;
 
-	int espacioEncontrado = 0;
+	log_info(archivoLog, "Comienza el hilo Administrador de Espacios.\n");
 
-	//Caracter leido del archivo
-	int leido;
-	//Inicio y fin del espacio leido
-	int inicioEspacio = 0;
-	int finalEspacio = 0;
-	//Espacio total leido (espacio = finalEspacio - inicioEspacio)
-	int espacio = 0;
+	while(1){
 
-	leido = fgetc(archivoSwap);
+		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
 
-	while(!(espacioEncontrado && !feof(archivoSwap))){
+		if(procedimiento == NUEVOPROCESO){
+			//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
+			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
+			recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
 
-		if(leido == 0){
-			finalEspacio++;
-		} else {
-			espacio = finalEspacio - inicioEspacio;
+			paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
 
-			if(espacioNecesario == espacio)
-				espacioEncontrado++;
-			else{
-				do {
-					leido = fgetc(archivoSwap);
-				} while (leido == 1);
+			if(paginaInicio == -1){
+				//No hay espacio disponible
+				log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
+				//TODO Enviar notificacion a Memoria
+			} else{
+				//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
+				asignarEspacio(paginaInicio, proceso);
+				log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
 			}
 		}
 
-		if(espacioEncontrado)
-			//Si se encontro el espacio, se devuelve desde donde empieza
-			return inicioEspacio;
-		else
-			fgetc(archivoSwap);
 	}
 
-	return -1;
+	free(proceso);
 }
 
-void asignarEspacio(int byteInicio, int espacioTotal){
+//Si encontro el espacio, devuelve el byte en donde comienza el espacio, sino devuelve -1
+int buscarEspacioDisponible(int paginasNecesarias){
 
-	char* bytesLeidos = malloc(byteInicio - 1);
-	int espacioEscrito = 0;
-	int terminoEscritura = 0;
+	int paginaInicio = 0;
+	int paginasEncontradas = 0;
+	int numeroPagina = 0;
+	int encontrado = 0;
+	pagina_t* pagina = malloc(sizeof(pagina_t));
 
-	fgets(bytesLeidos, byteInicio, archivoSwap);
+	pagina = list_get(listaGestionEspacios, numeroPagina);
+	paginaInicio = pagina->numeroPagina;
 
-	free(bytesLeidos);
+	while(numeroPagina <= cantidadPaginas){
 
-	while(terminoEscritura){
-		if(espacioEscrito <= espacioTotal){
-			fputc(1, archivoSwap);
-			espacioEscrito++;
+		if(pagina->disponibilidad == 1){
+			paginasEncontradas++;
 		}else{
-			terminoEscritura++;
+			paginasEncontradas = 0;
+			paginaInicio = numeroPagina;
+		}
+
+		if(paginasEncontradas == paginasNecesarias){
+			encontrado++;
+			break;
+		}else{
+			numeroPagina++;
+			pagina = list_get(listaGestionEspacios, numeroPagina);
 		}
 	}
+
+	if(!encontrado)
+		return -1;
+
+	free(pagina);
+	return paginaInicio;
+}
+
+void asignarEspacio(int paginaInicio, process_t* proceso){
+
+	int i;
+	int paginaALeer;
+	pagina_t* pagina = malloc(sizeof(pagina_t));
+
+	pagina = list_get(listaGestionEspacios, paginaInicio);
+	paginaALeer = pagina->numeroPagina;
+
+	for(i = 0; i < proceso->cantidadDePaginas; i++){
+		//Asigno No Disponible y el ID del Proceso que la ocupa
+		pagina->disponibilidad = 0;
+		pagina->proceso = proceso->processID;
+
+		paginaALeer++;
+		pagina = list_get(listaGestionEspacios, paginaInicio);
+
+	}
+
+	free(pagina);
+}
+
+//TODO Cuando llega una peticion de escribir/leer una pagina se debe buscar la pagina y luego escribir/leer el archivo
+void buscarPaginas(){
+
 }
