@@ -45,7 +45,7 @@ typedef struct {
 } pagina_t;
 
 
-typedef enum {NUEVOPROCESO, BUSCARPAGINA} procedimiento_t;
+typedef enum {NUEVOPROCESO, LEER, ESCRIBIR, FINALIZAR} procedimiento_t;
 
 t_log* archivoLog;
 char* ipAdmMemoria;
@@ -58,7 +58,12 @@ int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
 int clienteMemoria;
 
+procedimiento_t procedimiento;
+
 t_list* listaGestionEspacios;
+
+pthread_mutex_t mutexProcedimiento;
+pthread_mutex_t mutexProceso;
 
 FILE* archivoSwap;
 
@@ -70,7 +75,7 @@ int configurarSocketServidor();
 void admDeEspacios();
 int buscarEspacioDisponible(int espacioNecesario);
 void asignarEspacio(int paginaInicio, process_t* proceso);
-void buscarPaginas();
+void escribirLeer();
 
 int main(int argc, char** argv) {
 
@@ -116,16 +121,19 @@ int main(int argc, char** argv) {
 		free(pagina);
 	}
 
+	pthread_mutex_init(&mutexProcedimiento, NULL);
+	pthread_mutex_init(&mutexProceso, NULL);
+
 	//Thread que gestiona los espacios en la lista de gestion
 	pthread_t admDeEspacio;
 	pthread_create(&admDeEspacio, NULL, (void *) admDeEspacios, NULL);
 
 	//Thread que busca las paginas solicitadas por memoria
-	pthread_t buscadorDePaginas;
-	pthread_create(&buscadorDePaginas, NULL, (void *) buscarPaginas, NULL);
+	pthread_t escribirLeerPaginas;
+	pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
 
 	pthread_join(admDeEspacio, NULL);
-	pthread_join(buscadorDePaginas, NULL);
+	pthread_join(escribirLeerPaginas, NULL);
 
 	return 0;
 }
@@ -177,20 +185,23 @@ void admDeEspacios(){
 	//Cuando llega un NUEVO PROCESO hay que añadirlo a la lista
 	process_t* proceso = malloc(sizeof(process_t));
 	int paginaInicio = 0;
-	procedimiento_t procedimiento;
 
 	log_info(archivoLog, "Comienza el hilo Administrador de Espacios.\n");
 
 	while(1){
 
+		pthread_mutex_lock(&mutexProcedimiento);
 		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
 
 		if(procedimiento == NUEVOPROCESO){
+			pthread_mutex_unlock(&mutexProcedimiento);
 			//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
+			pthread_mutex_lock(&mutexProceso);
 			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
 			recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
 
 			paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
+			pthread_mutex_unlock(&mutexProceso);
 
 			if(paginaInicio == -1){
 				//No hay espacio disponible
@@ -200,8 +211,17 @@ void admDeEspacios(){
 				//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
 				asignarEspacio(paginaInicio, proceso);
 				log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
+				//TODO Enviar un mensaje a memoria indicando que se pudo asignar
 			}
 		}
+		pthread_mutex_unlock(&mutexProcedimiento);
+
+		pthread_mutex_lock(&mutexProcedimiento);
+		if(procedimiento == FINALIZAR){
+			pthread_mutex_unlock(&mutexProcedimiento);
+
+		}
+		pthread_mutex_unlock(&mutexProcedimiento);
 
 	}
 
@@ -268,6 +288,28 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 }
 
 //TODO Cuando llega una peticion de escribir/leer una pagina se debe buscar la pagina y luego escribir/leer el archivo
-void buscarPaginas(){
+void escribirLeer(){
+	process_t* proceso = malloc(sizeof(process_t));
 
+	log_info(archivoLog, "Comienza el hilo Escritura/Lectura.\n");
+
+	while(1){
+
+		pthread_mutex_lock(&mutexProcedimiento);
+		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
+
+		if(procedimiento == LEER){
+			pthread_mutex_unlock(&mutexProcedimiento);
+		}
+		pthread_mutex_unlock(&mutexProcedimiento);
+
+		pthread_mutex_lock(&mutexProcedimiento);
+		if(procedimiento == ESCRIBIR){
+			pthread_mutex_unlock(&mutexProcedimiento);
+		}
+
+		pthread_mutex_unlock(&mutexProcedimiento);
+	}
+
+	free(proceso);
 }

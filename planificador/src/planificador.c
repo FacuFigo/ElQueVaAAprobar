@@ -64,7 +64,9 @@ int pIDContador = 1;
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
 typedef enum {RAFAGA, BLOQUEAR} formaFinalizacion_t;
+typedef enum {FINALIZOPROCESO} procedimiento_t;
 //typedef enum {RAFAGA, QUANTUM, BLOQUEADO} estadoCPU_t; //el cpu avisa si termino la rafaga (FIFO) o quantum(RR)
+
 
 typedef struct {
 	char* comando;
@@ -91,7 +93,6 @@ int configurarSocketServidor();
 void manejoDeConsola();
 void planificadorFIFO();
 void planificadorRR();
-void controlTiempo();
 
 //Funciones de sockets
 char* serializarOperandos(t_Package *package);
@@ -105,7 +106,7 @@ void estadoProcesos();
 void comandoCPU();
 
 //Funciones de planificador
-int buscarEnCola(t_queue* cola, char* pid);
+int buscarEnCola(t_queue* cola, int pid);
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino);
 
 int main(int argc, char** argv) {
@@ -179,7 +180,7 @@ int main(int argc, char** argv) {
 	//pthread_t hiloControlTiempo;
 	//pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
 
-	if(algoritmo == "FIFO"){
+	if(string_equals_ignore_case(algoritmo, "FIFO")){
 		//Comienza el thread del planificadorFIFO
 		pthread_t hiloPlanificadorFIFO;
 		pthread_create(&hiloPlanificadorFIFO, NULL, (void *) planificadorFIFO, NULL);
@@ -276,15 +277,18 @@ void manejoDeConsola() {
 }
 
 void correrProceso(char* path) {
+
 	pthread_mutex_lock(&mutexCrearPCB);
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
 	pthread_mutex_unlock(&mutexCrearPCB);
-	//Agrego a la cola READY y bloqueo con un mutex
+
+	//Agrego a la cola READY
 	pthread_mutex_lock(&mutexQueueReady);
 	queue_push(queueReady, pcbProc);
 	pthread_mutex_unlock(&mutexQueueReady);
+
 }
 
 void generarPCB(pcb_t* pcb){
@@ -300,12 +304,14 @@ void generarPCB(pcb_t* pcb){
 
 }
 
-//TODO Esto es horrible, mejorar
 void finalizarProceso(char* pid){
 
-	if(buscarEnCola(queueReady, pid) == -1){
-		if(buscarEnCola(queueRunning, pid) == -1)
-			if(buscarEnCola(queueBlocked, pid) == -1)
+	//Cambio el pid string que viene como parametro por un int
+	int pidNumero = strtol(pid, NULL, 10);
+
+	if(buscarEnCola(queueReady, pidNumero) == -1){
+		if(buscarEnCola(queueRunning, pidNumero) == -1)
+			if(buscarEnCola(queueBlocked, pidNumero) == -1)
 				log_error(archivoLog, "No se pudo finalizar el proceso %s", pid);
 			else
 				log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
@@ -317,7 +323,7 @@ void finalizarProceso(char* pid){
 }
 
 //¿Una mejor forma seria que devuelva el pcb encontrado y lo elimino fuera?
-int buscarEnCola(t_queue* cola, char* pid){
+int buscarEnCola(t_queue* cola, int pid){
 
 	pcb_t* pcb = malloc(sizeof(pcb_t));
 	t_queue* queueAuxiliar = queue_create();
@@ -327,14 +333,23 @@ int buscarEnCola(t_queue* cola, char* pid){
 	while(!queue_is_empty(cola)){
 
 		pcb = queue_pop(cola);
-		//TODO Encontrar la forma de comparar el int con el pID del comando
 		if(pcb->processID == pid){
-			//Enviar al CPU la peticion de eliminar
-			//Recibir la confirmacion de que se pudo eliminar
-			log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
-			free(pcb);
+
 			encontrado++;
-			break;
+			//TODO Cambiar por serializacion
+			int* notificacion = malloc(sizeof(int));
+			*notificacion = 2;
+			//Enviar al CPU la peticion de eliminar
+			send(clienteCPU, notificacion, sizeof(int), 0);
+			//Recibir la confirmacion de que se pudo eliminar
+			recv(clienteCPU, notificacion, sizeof(int), 0);
+			//Pongo como ejemplo que el 10 es el numero para finalizacion exitosa
+			if(*notificacion == 10){
+				log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
+				free(pcb);
+				break;
+			}
+
 		}else{
 			queue_push(queueAuxiliar, pcb);
 		}
@@ -403,29 +418,36 @@ void planificadorFIFO() {
 			log_info(archivoLog, "Empieza la ejecución de ");
 
 //TODO mandarle al cpu el pid del proceso que va a correr
-//Esperar por la respuesta del CPU que va a mandar si termina el proceso o si sigue - Se bloquea o finaliza normal -
 //Esto se va a saber por protocolos en los que hay que ponerse de acuerdo
 
-			if(procesoContinua){
-				switch(*formaDeFinalizacion){
-				case RAFAGA:
-					finalizarRafaga(auxPCB, queueReady);
-					log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
-					break;
-				case BLOQUEAR:
-					finalizarRafaga(auxPCB, queueBlocked);
-					log_info(archivoLog, "Se bloquea el proceso %i.\n", auxPCB->processID);
-					break;
-				}
-			} else {
-				finalizarProceso(auxPCB->processID);
+			int* procedimiento = malloc(sizeof(int));
+			recv(clienteCPU, procedimiento, sizeof(int), 0);
 
+			if(procedimiento == FINALIZOPROCESO){
+				int* formaFinalizacion = malloc(sizeof(int));
+				recv(clienteCPU, formaFinalizacion, sizeof(int), 0);
+				switch(*formaFinalizacion){
+					case RAFAGA:
+						finalizarRafaga(auxPCB, queueReady);
+						log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
+						break;
+					case BLOQUEAR:
+						finalizarRafaga(auxPCB, queueBlocked);
+						log_info(archivoLog, "Se bloquea el proceso %i.\n", auxPCB->processID);
+						break;
+				}
+				free(formaFinalizacion);
+			} else {
+				char* pidFinalizar = malloc(4);
+				pidFinalizar = string_itoa(auxPCB->processID);
+				finalizarProceso(pidFinalizar);
+				free(pidFinalizar);
 			}
 
 			//Libero la CPU
 			auxCPU	= queue_pop(queueCPU);
 			queue_push(queueCPULibre, auxCPU);
-
+			free(procedimiento);
 		}
 	}
 	free(auxCPU);
@@ -459,8 +481,6 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 void planificadorRR() {
 
 }
-
-
 
 void controlarTiempoBlock(){
 
