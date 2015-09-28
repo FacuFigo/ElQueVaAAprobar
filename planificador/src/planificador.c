@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
+#include <sys/sem.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -46,6 +48,15 @@ t_queue* queueRunning;
 t_queue* queueBlocked;
 t_queue* queueCPU;
 t_queue* queueCPULibre;
+
+pthread_mutex_t mutexCrearPCB;
+pthread_mutex_t mutexQueueReady;
+pthread_mutex_t mutexQueueRunning;
+pthread_mutex_t mutexQueueCPU;
+pthread_mutex_t mutexQueueCPULibre;
+pthread_mutex_t mutexQueueBlocked;
+
+
 
 
 int pIDContador = 1;
@@ -156,6 +167,18 @@ int main(int argc, char** argv) {
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
+	//inicializo los semaforos
+	pthread_mutex_init(&mutexQueueReady, NULL);
+	pthread_mutex_init(&mutexCrearPCB, NULL);
+	pthread_mutex_init(&mutexQueueRunning, NULL);
+	pthread_mutex_init(&mutexQueueCPU, NULL);
+	pthread_mutex_init(&mutexQueueCPULibre, NULL);
+	pthread_mutex_init(&mutexQueueBlocked, NULL);
+
+	//Comienza el thread de control de tiempo
+	//pthread_t hiloControlTiempo;
+	//pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
+
 	if(algoritmo == "FIFO"){
 		//Comienza el thread del planificadorFIFO
 		pthread_t hiloPlanificadorFIFO;
@@ -253,12 +276,15 @@ void manejoDeConsola() {
 }
 
 void correrProceso(char* path) {
-	
+	pthread_mutex_lock(&mutexCrearPCB);
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
-	//Agrego a la cola READY
+	pthread_mutex_unlock(&mutexCrearPCB);
+	//Agrego a la cola READY y bloqueo con un mutex
+	pthread_mutex_lock(&mutexQueueReady);
 	queue_push(queueReady, pcbProc);
+	pthread_mutex_unlock(&mutexQueueReady);
 }
 
 void generarPCB(pcb_t* pcb){
@@ -361,9 +387,7 @@ void planificadorFIFO() {
 	log_info(archivoLog, "Empieza el thread planificador.\n");
 
 	int* auxCPU = malloc(sizeof(int));
-	//Comienza el thread de control de tiempo
-	pthread_t hiloControlTiempo;
-	pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
+
 
 	while(1){
 
@@ -439,11 +463,5 @@ void planificadorRR() {
 
 
 void controlarTiempoBlock(){
-	//TODO VER TEMA CONTROL TIEMPO
-
-		int* tiempoBlock = malloc(sizeof(int));
-		pcb_t* auxPCB = malloc(sizeof(pcb_t));
-
-
 
 }
