@@ -75,6 +75,8 @@ int configurarSocketServidor();
 void admDeEspacios();
 int buscarEspacioDisponible(int espacioNecesario);
 void asignarEspacio(int paginaInicio, process_t* proceso);
+int liberarMemoria(int pid);
+void liberarEspacioEnArchivo(int numeroDePagina);
 void escribirLeer();
 
 int main(int argc, char** argv) {
@@ -117,6 +119,7 @@ int main(int argc, char** argv) {
 		pagina_t* pagina = malloc(sizeof(pagina_t));
 		pagina->numeroPagina = i;
 		pagina->disponibilidad = 1;
+		pagina->proceso = -1;
 		list_add(listaGestionEspacios, pagina);
 		free(pagina);
 	}
@@ -219,7 +222,13 @@ void admDeEspacios(){
 		pthread_mutex_lock(&mutexProcedimiento);
 		if(procedimiento == FINALIZAR){
 			pthread_mutex_unlock(&mutexProcedimiento);
+			//Recibe la peticion por parte de Memoria de eliminar un proceso
+			pthread_mutex_lock(&mutexProceso);
+			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
 
+			if(liberarMemoria(proceso->processID) == -1){
+				log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
+			}
 		}
 		pthread_mutex_unlock(&mutexProcedimiento);
 
@@ -285,6 +294,45 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 	}
 
 	free(pagina);
+}
+
+//Libera la parte de memoria ocupada por el proceso
+int liberarMemoria(int pid){
+	int numero = 0;
+
+	pagina_t* pagina = malloc(sizeof(pagina_t));
+	pagina = list_get(listaGestionEspacios, numero);
+
+	while(pagina->proceso != pid){
+		numero++;
+		pagina = list_get(listaGestionEspacios, numero);
+	}
+
+	while(pagina->proceso == pid){
+
+		liberarEspacioEnArchivo(pagina->numeroPagina);
+
+		pagina->disponibilidad = 1;
+		pagina->proceso = -1;
+		numero++;
+		pagina = list_get(listaGestionEspacios, numero);
+	}
+
+	return 0;
+}
+
+void liberarEspacioEnArchivo(int numeroDePagina){
+	int numeroByte;
+	int bytesALeer = (numeroDePagina - 1) * tamanioPagina;
+
+	char* leido = malloc(bytesALeer);
+	fgets(leido, bytesALeer, archivoSwap);
+
+	for(numeroByte = 0; numeroByte <= tamanioPagina; numeroByte++){
+		fputc('\0', archivoSwap);
+	}
+
+	free(leido);
 }
 
 //TODO Cuando llega una peticion de escribir/leer una pagina se debe buscar la pagina y luego escribir/leer el archivo
