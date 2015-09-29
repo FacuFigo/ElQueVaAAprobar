@@ -49,6 +49,7 @@ t_queue* queueBlocked;
 t_queue* queueCPU;
 t_queue* queueCPULibre;
 
+pthread_mutex_t mutex;
 pthread_mutex_t mutexCrearPCB;
 pthread_mutex_t mutexQueueReady;
 pthread_mutex_t mutexQueueRunning;
@@ -175,6 +176,7 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexQueueCPU, NULL);
 	pthread_mutex_init(&mutexQueueCPULibre, NULL);
 	pthread_mutex_init(&mutexQueueBlocked, NULL);
+	pthread_mutex_init(&mutex, NULL);
 
 	//Comienza el thread de control de tiempo
 	//pthread_t hiloControlTiempo;
@@ -332,7 +334,9 @@ int buscarEnCola(t_queue* cola, int pid){
 	//Busco en la queue que viene por parametro, si se encuentra lo elimina y marca el flag como encontrado
 	while(!queue_is_empty(cola)){
 
+		pthread_mutex_lock(&mutex);
 		pcb = queue_pop(cola);
+		pthread_mutex_unlock(&mutex);
 		if(pcb->processID == pid){
 
 			encontrado++;
@@ -351,14 +355,18 @@ int buscarEnCola(t_queue* cola, int pid){
 			}
 
 		}else{
+			pthread_mutex_lock(&mutex);
 			queue_push(queueAuxiliar, pcb);
+			pthread_mutex_unlock(&mutex);
 		}
 
 	}
 
 	while(!queue_is_empty(queueAuxiliar)){
+		pthread_mutex_lock(&mutex);
 		pcb = queue_pop(queueAuxiliar);
 		queue_push(cola, pcb);
+		pthread_mutex_unlock(&mutex);
 	}
 
 	if(encontrado)
@@ -409,12 +417,20 @@ void planificadorFIFO() {
 		if (! (queue_is_empty(queueCPULibre) && queue_is_empty(queueReady))){
 
 			pcb_t* auxPCB = malloc(sizeof(pcb_t));
+			pthread_mutex_lock(&mutexQueueReady);
 			auxPCB = queue_pop(queueReady);
+			pthread_mutex_unlock(&mutexQueueReady);
+			pthread_mutex_lock(&mutexQueueCPULibre);
 			auxCPU = queue_pop(queueCPULibre);
-			//Cambia el estado del proceso
+			pthread_mutex_unlock(&mutexQueueCPULibre);
+			//Cambia el estado del proceso (Acá tambien mutex para cuidar el acceso a estado proceso?)
 			auxPCB->estadoProceso = 1;
+			pthread_mutex_lock(&mutexQueueCPU);
 			queue_push(queueCPU, auxCPU);
+			pthread_mutex_unlock(&mutexQueueCPU);
+			pthread_mutex_lock(&mutexQueueRunning);
 			queue_push(queueRunning, auxPCB);
+			pthread_mutex_unlock(&mutexQueueRunning);
 			log_info(archivoLog, "Empieza la ejecución de ");
 
 //TODO mandarle al cpu el pid del proceso que va a correr
@@ -446,7 +462,9 @@ void planificadorFIFO() {
 
 			//Libero la CPU
 			auxCPU	= queue_pop(queueCPU);
+			pthread_mutex_lock(&mutexQueueCPULibre);
 			queue_push(queueCPULibre, auxCPU);
+			pthread_mutex_unlock(&mutexQueueCPULibre);
 			free(procedimiento);
 		}
 	}
@@ -462,16 +480,22 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 	while(!queue_is_empty(queueRunning)){
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID){
+			pthread_mutex_lock(&mutex);
 			queue_push(colaDestino, pcb);
+			pthread_mutex_unlock(&mutex);
 			break;
 		} else {
+			pthread_mutex_lock(&mutex);
 			queue_push(queueAux, aux);
+			pthread_mutex_unlock(&mutex);
 		}
 	}
 
 	while(!queue_is_empty(queueAux)){
 		aux = queue_pop(queueAux);
+		pthread_mutex_lock(&mutexQueueRunning);
 		queue_push(queueRunning, aux);
+		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 
 	free(queueAux);
