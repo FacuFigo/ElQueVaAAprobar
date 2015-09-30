@@ -31,6 +31,7 @@
 #include <commons/string.h>
 #include <commons/collections/list.h>
 #include <commons/collections/queue.h>
+#include "../../sockets.h"
 
 #define BACKLOG 5
 
@@ -118,6 +119,13 @@ int main(int argc, char** argv) {
 
 	configurarPlanificador(argv[1]);
 
+	//Creacion de colas
+	queueReady = queue_create();
+	queueRunning = queue_create();
+	queueBlocked = queue_create();
+	queueCPU = queue_create();
+	queueCPULibre = queue_create();
+
 	//Creacion de servidor
 	configurarSocketServidor();
 
@@ -157,18 +165,11 @@ int main(int argc, char** argv) {
 	//Meto la cpu que se conecta a la cola de libres
 	queue_push(queueCPULibre, &clienteCPU);
 
-	//Creacion de colas
-	queueReady = queue_create();
-	queueRunning = queue_create();
-	queueBlocked = queue_create();
-	queueCPU = queue_create();
-	queueCPULibre = queue_create();
-
 //TODO Hilo multiplexor
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
-
+/*
 	//inicializo los semaforos
 	pthread_mutex_init(&mutexQueueReady, NULL);
 	pthread_mutex_init(&mutexCrearPCB, NULL);
@@ -193,7 +194,7 @@ int main(int argc, char** argv) {
 		pthread_create(&hiloPlanificadorRR, NULL, (void *) planificadorRR, NULL);
 		pthread_join(hiloPlanificadorRR, NULL);
 	}
-
+*/
 	pthread_join(hiloConsola, NULL);
 	return 0;
 }
@@ -253,11 +254,17 @@ void manejoDeConsola() {
 //TODO Cambiar scanf() por fgets()
 		scanf("%s %s", comando.comando, comando.parametro);
 		getchar();
-		if (comando.parametro == NULL){
-			if (string_equals_ignore_case(comando.comando, "correr")) 
+		if (comando.parametro != NULL){
+			if (string_equals_ignore_case(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
 				//send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
-			 else 
+				int tamanioPaquete = sizeof(int)*2+strlen(comando.parametro)+1;
+				char* paqueteSerializado = malloc (tamanioPaquete);
+				serializarChar(serializarInt(paqueteSerializado, 0), comando.parametro);
+				send(clienteCPU, paqueteSerializado, tamanioPaquete, 0);
+				free(paqueteSerializado);
+			}
+			else
 				finalizarProceso(comando.parametro);
 		} else {
 			if (string_equals_ignore_case(comando.comando, "ps"))

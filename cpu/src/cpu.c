@@ -28,6 +28,7 @@
 #include <commons/process.h>
 #include <commons/string.h>
 #include <commons/collections/list.h>
+#include "../../sockets.h"
 
 t_log* archivoLog;
 char* ipPlanificador;
@@ -74,14 +75,21 @@ int main(int argc, char** argv) {
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n",
 				ipPlanificador);
 
-	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
-		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
-	else
-		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
+//	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
+//		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
+//	else
+//		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
 	char* mCod = malloc(15);
-
-	recv(socketPlanificador, mCod, 15, 0);
+	int tamanioCadena,operacion;
+	//recv(socketPlanificador, mCod, 8, 0);
+	//memcpy(&operacion,mCod,4);
+	//memcpy(&tamanioCadena,mCod+4,4);
+	recibirYDeserializarInt(&operacion,socketPlanificador);
+	log_info(archivoLog, "Operacion %d", operacion);
+	//log_info(archivoLog, "Tamaño cadena %d", tamanioCadena);
+	//recv(socketPlanificador, mCod, 5, 0);
+	recibirYDeserializarChar(&mCod,socketPlanificador);
 	log_info(archivoLog, "Recibi %s", mCod);
 
 	send(socketMemoria, mCod, 15, 0);
@@ -227,10 +235,10 @@ void ejecutarmProc(char* path, int programCounter) {
 			leermProc(comandoLeido);
 		}
 		if (string_equals_ignore_case(instruccion, "escribir")) { //proximamente, solo en sisop
-			escribirmProc(comandoLeido);   //no se que onda este error y el de entrada-salida
+			//escribirmProc(comandoLeido);   //no se que onda este error y el de entrada-salida
 		}
 		if (string_equals_ignore_case(instruccion, "entrada-salida")) { //proximamente, solo en sisop
-			entradaSalidamProc(comandoLeido);
+			//entradaSalidamProc(comandoLeido);
 		}
 		if (string_equals_ignore_case(instruccion, "finalizar")) {
 			finalizarmProc();
