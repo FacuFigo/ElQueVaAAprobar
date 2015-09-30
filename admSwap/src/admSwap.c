@@ -78,6 +78,8 @@ void asignarEspacio(int paginaInicio, process_t* proceso);
 int liberarMemoria(int pid);
 void liberarEspacioEnArchivo(int numeroDePagina);
 void escribirLeer();
+char* leerPagina(int numeroPagina);
+void escribirPagina(int paginaAEscribir, char* contenido);
 
 int main(int argc, char** argv) {
 
@@ -132,11 +134,13 @@ int main(int argc, char** argv) {
 	pthread_create(&admDeEspacio, NULL, (void *) admDeEspacios, NULL);
 
 	//Thread que busca las paginas solicitadas por memoria
-	pthread_t escribirLeerPaginas;
-	pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
+	//pthread_t escribirLeerPaginas;
+	//pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
 
 	pthread_join(admDeEspacio, NULL);
-	pthread_join(escribirLeerPaginas, NULL);
+	//pthread_join(escribirLeerPaginas, NULL);
+
+	fclose(archivoSwap);
 
 	return 0;
 }
@@ -193,18 +197,18 @@ void admDeEspacios(){
 
 	while(1){
 
-		pthread_mutex_lock(&mutexProcedimiento);
+		//pthread_mutex_lock(&mutexProcedimiento);
 		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
 
 		if(procedimiento == NUEVOPROCESO){
-			pthread_mutex_unlock(&mutexProcedimiento);
+			//pthread_mutex_unlock(&mutexProcedimiento);
 			//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
-			pthread_mutex_lock(&mutexProceso);
+			//pthread_mutex_lock(&mutexProceso);
 			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
 			recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
 
 			paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
-			pthread_mutex_unlock(&mutexProceso);
+			//pthread_mutex_unlock(&mutexProceso);
 
 			if(paginaInicio == -1){
 				//No hay espacio disponible
@@ -217,20 +221,52 @@ void admDeEspacios(){
 				//TODO Enviar un mensaje a memoria indicando que se pudo asignar
 			}
 		}
-		pthread_mutex_unlock(&mutexProcedimiento);
+		//pthread_mutex_unlock(&mutexProcedimiento);
 
-		pthread_mutex_lock(&mutexProcedimiento);
+		//pthread_mutex_lock(&mutexProcedimiento);
 		if(procedimiento == FINALIZAR){
-			pthread_mutex_unlock(&mutexProcedimiento);
+			//pthread_mutex_unlock(&mutexProcedimiento);
 			//Recibe la peticion por parte de Memoria de eliminar un proceso
-			pthread_mutex_lock(&mutexProceso);
+			//pthread_mutex_lock(&mutexProceso);
 			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
 
 			if(liberarMemoria(proceso->processID) == -1){
 				log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
 			}
 		}
-		pthread_mutex_unlock(&mutexProcedimiento);
+		//pthread_mutex_unlock(&mutexProcedimiento);
+
+		if(procedimiento == LEER){
+
+			int* paginaALeer = malloc(sizeof(int));
+			recv(clienteMemoria, &paginaALeer, sizeof(int), 0);
+
+			//TODO Confirmar el tamaño del string a leer
+			char* contenidoPagina = malloc(tamanioPagina);
+			contenidoPagina = leerPagina(*paginaALeer);
+			//TODO Enviar contenidoPagina a Memoria
+
+			free(paginaALeer);
+			free(contenidoPagina);
+		}
+
+		if(procedimiento == ESCRIBIR){
+
+			int* paginaAEscribir = malloc(sizeof(int));
+			recv(clienteMemoria, &paginaAEscribir, sizeof(int), 0);
+
+			int* tamanioContenido = malloc(sizeof(int));
+			recv(clienteMemoria, &tamanioContenido, sizeof(int), 0);
+
+			char* contenido = malloc(*tamanioContenido);
+			recv(clienteMemoria, &contenido, *tamanioContenido, 0);
+			free(tamanioContenido);
+
+			escribirPagina(*paginaAEscribir, contenido);
+			//TODO Enviar confirmacion y contenido a Memoria
+
+			free(contenido);
+		}
 
 	}
 
@@ -323,20 +359,19 @@ int liberarMemoria(int pid){
 
 void liberarEspacioEnArchivo(int numeroDePagina){
 	int numeroByte;
-	int bytesALeer = (numeroDePagina - 1) * tamanioPagina;
+	int posicion = numeroDePagina * tamanioPagina;
 
-	char* leido = malloc(bytesALeer);
-	fgets(leido, bytesALeer, archivoSwap);
+	fseek(archivoSwap, posicion,SEEK_SET);
 
 	for(numeroByte = 0; numeroByte <= tamanioPagina; numeroByte++){
 		fputc('\0', archivoSwap);
 	}
 
-	free(leido);
 }
 
 //TODO Cuando llega una peticion de escribir/leer una pagina se debe buscar la pagina y luego escribir/leer el archivo
 void escribirLeer(){
+
 	process_t* proceso = malloc(sizeof(process_t));
 
 	log_info(archivoLog, "Comienza el hilo Escritura/Lectura.\n");
@@ -360,4 +395,25 @@ void escribirLeer(){
 	}
 
 	free(proceso);
+}
+
+char* leerPagina(int numeroPagina){
+	int posicion = numeroPagina * tamanioPagina;
+	char* contenido = malloc(tamanioPagina);
+
+	fseek(archivoSwap, posicion, SEEK_SET);
+	//fgets o fread?
+	fgets(contenido, tamanioPagina, archivoSwap);
+	//TODO Devuelve tambien los '\0', se toman como caracteres vacios? Si es asi aplicar string_trim()
+
+	return contenido;
+}
+
+void escribirPagina(int paginaAEscribir, char* contenido){
+	int posicion = paginaAEscribir * tamanioPagina;
+
+	fseek(archivoSwap, posicion, SEEK_SET);
+
+	fputs(contenido, archivoSwap);
+
 }
