@@ -46,20 +46,16 @@ typedef struct _t_Package {
 	uint32_t message_long;
 } t_Package;
 
-typedef enum {
-	iniciar, leer, escribir, entradaSalida, finalizar
-} t_instruccion;
-
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int recieve_and_deserialize(t_Package *package, int socketCliente);
-void ejecutarmProc(char* ruta);
+void ejecutarmProc(char* ruta, int contador);
 void iniciarmProc(char* comando); //desde aca a finalizarmProc,ver si son void
 void leermProc(char* comando);
 void escribirmProc(char* comando);
 void entradaSalidamProc(char* comando);
 void finalizarmProc();
-void asignarmCodHilo(char* path, int programCounter);
+
 
 int main(int argc, char** argv) {
 
@@ -187,57 +183,6 @@ int recieve_and_deserialize(t_Package *package, int socketCliente) {
 	return status;
 }
 
-void ejecutarmProc(char* path) {
-	FILE* mCod;
-	char* resultadosTot = malloc(100);
-	char* comando = malloc(20);
-	char* instruccion = malloc(10);
-	char** comandoSplit = malloc(sizeof(char*) * 3);
-
-	mCod = fopen(path, "r");
-	while (fgets(comando, 20, mCod) != NULL) {
-
-		comandoSplit = string_split(comando, " ");
-		instruccion = comandoSplit[0];
-
-		switch (instruccion) {
-		case iniciar:
-			iniciarmProc(comando);
-			char* resultado = malloc(20);
-			recv(socketMemoria, resultado, 20, 0);
-			string_append_with_format(&resultadosTot, "%s!", resultado);
-			break;
-		case leer:
-			leermProc(comando);
-			break;
-		case escribir:
-			escribirmProc(comando);
-			break;
-		case entradaSalida:
-			entradaSalidamProc(comando);
-			break;
-		case finalizar:
-			finalizarmProc();
-			char* resultado = malloc(20);
-			recv(socketMemoria, resultado, 20, 0);
-			string_append_with_format(&resultadosTot, "%s!", resultado);
-			break;
-		}
-
-		sleep(retardo);
-	}
-
-	void liberarPunterosDobles(comandoSplit, 3);
-	free(comandoSplit);
-	free(instruccion);
-	free(comando);
-	fclose(mCod);
-
-	send(socketPlanificador, resultadosTot, 100, 0);
-	free(resultadosTot);
-
-}
-
 void iniciarmProc(char* comando) {
 	send(socketMemoria, comando, 20, 0);
 }
@@ -255,18 +200,13 @@ void leermProc(char* comando) {
 
 }
 
-liberarPuntrosDobles(char** puntero, int ultimo) {
-	int i;
-	for (i = 0; i <= ultimo; i++)
-		free(puntero[i]);
-}
-
-void asignarmCodHilo(char* path, int programCounter) {
+void ejecutarmProc(char* path, int programCounter) {
 	FILE* mCod;
 	int pc = programCounter; //le llega de plani
 	char* comandoLeido = malloc(30);
 	char* instruccion = malloc(20);
-	char** leidoSplit = malloc(sizeof(char*) * 3); //esta copiado de la func ejecutarmProc, hay que ver lo del malloc
+	char** leidoSplit = malloc(sizeof(char*) * 3);
+	char* resultadosTot = malloc(100);  //ver calloc
 
 	mCod = fopen(path, "r");
 	fgets(comandoLeido, 30, mCod);
@@ -274,19 +214,42 @@ void asignarmCodHilo(char* path, int programCounter) {
 	leidoSplit = string_split(comandoLeido, " "); //separar string y asignarle la primer parte a comando --> separar con un espacio " "
 	instruccion = leidoSplit[0];
 
-	while (!string_equals_ignore_case(instruccion, "entrada-salida")) {
+	while (!feof(mCod)) {  //final de archivo
 		pc += 1;
-		if (string_equals_ignore_case(instruccion, "finalizar")) {
-			//TODO finalizarProceso();
-			break;
-		} else {
-			fgets(comandoLeido, 30, mCod); //Revisar aca ¡!¡!¡!
+
+		if (string_equals_ignore_case(instruccion, "iniciar")) {
+			iniciarmProc(comandoLeido);
+			char* resultado = malloc(20);
+			recv(socketMemoria, resultado, 20, 0);
+			string_append_with_format(&resultadosTot, "%s!", resultado);
 		}
+		if (string_equals_ignore_case(instruccion, "leer")) {
+			leermProc(comandoLeido);
+		}
+		if (string_equals_ignore_case(instruccion, "escribir")) { //proximamente, solo en sisop
+			escribirmProc(comandoLeido);   //no se que onda este error y el de entrada-salida
+		}
+		if (string_equals_ignore_case(instruccion, "entrada-salida")) { //proximamente, solo en sisop
+			entradaSalidamProc(comandoLeido);
+		}
+		if (string_equals_ignore_case(instruccion, "finalizar")) {
+			finalizarmProc();
+			char* resultado = malloc(20);
+			recv(socketMemoria, resultado, 20, 0);
+			string_append_with_format(&resultadosTot, "%s!", resultado);
+		}
+
+		sleep(retardo);
+		fgets(comandoLeido, 30, mCod);
+
 	}
 
-	if (string_equals_ignore_case(instruccion, "finalizar")) {
-		//avisar finalizar al plani
-	} else {
-		//avisar interrupcion al plani
-	}
+	free(comandoLeido);
+	free(instruccion);
+	free(leidoSplit);
+	fclose(mCod);
+
+	send(socketPlanificador, resultadosTot, 100, 0);
+	free(resultadosTot);
+
 }
