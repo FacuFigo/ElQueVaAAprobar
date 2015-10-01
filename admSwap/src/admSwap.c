@@ -59,7 +59,7 @@ int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
 int clienteMemoria;
 
-procedimiento_t procedimiento;
+int procedimiento;
 
 t_list* listaGestionEspacios;
 
@@ -190,7 +190,7 @@ int configurarSocketServidor() {
 }
 
 void admDeEspacios(){
-	//Cuando llega un NUEVO PROCESO hay que añadirlo a la lista
+
 	process_t* proceso = malloc(sizeof(process_t));
 	int paginaInicio = 0;
 
@@ -198,77 +198,107 @@ void admDeEspacios(){
 
 	while(1){
 
-		//pthread_mutex_lock(&mutexProcedimiento);
-		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
+		recibirYDeserializarInt(&procedimiento, clienteMemoria);
 
-		if(procedimiento == NUEVOPROCESO){
-			//pthread_mutex_unlock(&mutexProcedimiento);
-			//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
-			//pthread_mutex_lock(&mutexProceso);
-			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
-			recv(clienteMemoria, &proceso->cantidadDePaginas, sizeof(int), 0);
+		switch(procedimiento){
+			case NUEVOPROCESO:{
 
-			paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
-			//pthread_mutex_unlock(&mutexProceso);
+				//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
+				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
+				recibirYDeserializarInt(&proceso->cantidadDePaginas, clienteMemoria);
 
-			if(paginaInicio == -1){
-				//No hay espacio disponible
-				log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
-				//TODO Enviar notificacion a Memoria
-			} else{
-				//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
-				asignarEspacio(paginaInicio, proceso);
-				log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
-				//TODO Enviar un mensaje a memoria indicando que se pudo asignar
+				paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
+
+				if(paginaInicio == -1){
+					//No hay espacio disponible
+					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
+					//TODO Enviar notificacion a Memoria
+					char* paquete = malloc(10);
+
+					free(paquete);
+				} else{
+					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
+					asignarEspacio(paginaInicio, proceso);
+					log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
+					//TODO Enviar un mensaje a memoria indicando que se pudo asignar
+					char* paquete = malloc(10);
+
+					free(paquete);
+				}
+				break;
+			}
+
+			case FINALIZAR:{
+
+				//Recibe la peticion por parte de Memoria de eliminar un proceso
+				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
+
+				if(liberarMemoria(proceso->processID) == -1){
+					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
+				}else{
+					//TODO Enviar confirmacion
+					char* paquete = malloc(10);
+
+					free(paquete);
+				}
+				break;
+			}
+
+			case LEER:{
+
+				int* paginaALeer = malloc(sizeof(int));
+				recibirYDeserializarInt(paginaALeer, clienteMemoria);
+
+				char* contenidoPagina = malloc(tamanioPagina);
+				contenidoPagina = leerPagina(*paginaALeer);
+
+				//Enviar contenidoPagina a Memoria
+				int* tamanioPaquete = malloc(sizeof(int));
+				*tamanioPaquete = tamanioPagina + sizeof(int) * 2;
+				char* paquete = malloc(*tamanioPaquete);
+
+				serializarChar(serializarInt(serializarInt(paquete, procedimiento), strlen(contenidoPagina)), contenidoPagina);
+
+				send(clienteMemoria, paquete, *tamanioPaquete, 0);
+
+				free(paginaALeer);
+				free(contenidoPagina);
+				free(paquete);
+
+				break;
+			}
+
+			case ESCRIBIR:{
+
+				int* paginaAEscribir = malloc(sizeof(int));
+				recibirYDeserializarInt(paginaAEscribir, clienteMemoria);
+
+				int* tamanioContenido = malloc(sizeof(int));
+				recibirYDeserializarInt(tamanioContenido, clienteMemoria);
+
+				char* contenido = malloc(*tamanioContenido);
+				recibirYDeserializarChar(&contenido, clienteMemoria);
+
+				escribirPagina(*paginaAEscribir, contenido);
+
+				free(paginaAEscribir);
+				//Enviar confirmacion y contenido a Memoria
+				int* tamanioPaquete = malloc(sizeof(int));
+				*tamanioPaquete = *tamanioContenido + sizeof(int) * 2;
+				char* paquete = malloc(*tamanioPaquete);
+
+				serializarChar(serializarInt(serializarInt(paquete, procedimiento), *tamanioContenido), contenido);
+
+				send(clienteMemoria, paquete, *tamanioPaquete, 0);
+
+				free(paquete);
+				free(tamanioPaquete);
+				free(tamanioContenido);
+				free(contenido);
+
+				break;
 			}
 		}
-		//pthread_mutex_unlock(&mutexProcedimiento);
-
-		//pthread_mutex_lock(&mutexProcedimiento);
-		if(procedimiento == FINALIZAR){
-			//pthread_mutex_unlock(&mutexProcedimiento);
-			//Recibe la peticion por parte de Memoria de eliminar un proceso
-			//pthread_mutex_lock(&mutexProceso);
-			recv(clienteMemoria, &proceso->processID, sizeof(int), 0);
-
-			if(liberarMemoria(proceso->processID) == -1){
-				log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
-			}
-		}
-		//pthread_mutex_unlock(&mutexProcedimiento);
-
-		if(procedimiento == LEER){
-
-			int* paginaALeer = malloc(sizeof(int));
-			recv(clienteMemoria, &paginaALeer, sizeof(int), 0);
-
-			//TODO Confirmar el tamaño del string a leer
-			char* contenidoPagina = malloc(tamanioPagina);
-			contenidoPagina = leerPagina(*paginaALeer);
-			//TODO Enviar contenidoPagina a Memoria
-
-			free(paginaALeer);
-			free(contenidoPagina);
-		}
-
-		if(procedimiento == ESCRIBIR){
-
-			int* paginaAEscribir = malloc(sizeof(int));
-			recv(clienteMemoria, &paginaAEscribir, sizeof(int), 0);
-
-			int* tamanioContenido = malloc(sizeof(int));
-			recv(clienteMemoria, &tamanioContenido, sizeof(int), 0);
-
-			char* contenido = malloc(*tamanioContenido);
-			recv(clienteMemoria, &contenido, *tamanioContenido, 0);
-			free(tamanioContenido);
-
-			escribirPagina(*paginaAEscribir, contenido);
-			//TODO Enviar confirmacion y contenido a Memoria
-
-			free(contenido);
-		}
-
 	}
 
 	free(proceso);
@@ -292,7 +322,7 @@ int buscarEspacioDisponible(int paginasNecesarias){
 			paginasEncontradas++;
 		}else{
 			paginasEncontradas = 0;
-			paginaInicio = numeroPagina;
+			paginaInicio = numeroPagina + 1;
 		}
 
 		if(paginasEncontradas == paginasNecesarias){
@@ -370,47 +400,27 @@ void liberarEspacioEnArchivo(int numeroDePagina){
 
 }
 
-//TODO Cuando llega una peticion de escribir/leer una pagina se debe buscar la pagina y luego escribir/leer el archivo
+//TODO Thread para realizar la escritura y lectura de memoria - CHECKPOINT 3 -
 void escribirLeer(){
 
-	process_t* proceso = malloc(sizeof(process_t));
-
-	log_info(archivoLog, "Comienza el hilo Escritura/Lectura.\n");
-
-	while(1){
-
-		pthread_mutex_lock(&mutexProcedimiento);
-		recv(clienteMemoria, &procedimiento, sizeof(int), 0);
-
-		if(procedimiento == LEER){
-			pthread_mutex_unlock(&mutexProcedimiento);
-		}
-		pthread_mutex_unlock(&mutexProcedimiento);
-
-		pthread_mutex_lock(&mutexProcedimiento);
-		if(procedimiento == ESCRIBIR){
-			pthread_mutex_unlock(&mutexProcedimiento);
-		}
-
-		pthread_mutex_unlock(&mutexProcedimiento);
-	}
-
-	free(proceso);
 }
 
 char* leerPagina(int numeroPagina){
+
 	int posicion = numeroPagina * tamanioPagina;
 	char* contenido = malloc(tamanioPagina);
 
 	fseek(archivoSwap, posicion, SEEK_SET);
-	//fgets o fread?
+
 	fgets(contenido, tamanioPagina, archivoSwap);
-	//TODO Devuelve tambien los '\0', se toman como caracteres vacios? Si es asi aplicar string_trim()
+
+	string_trim(&contenido);
 
 	return contenido;
 }
 
 void escribirPagina(int paginaAEscribir, char* contenido){
+
 	int posicion = paginaAEscribir * tamanioPagina;
 
 	fseek(archivoSwap, posicion, SEEK_SET);

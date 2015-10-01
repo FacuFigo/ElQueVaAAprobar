@@ -96,14 +96,10 @@ void manejoDeConsola();
 void planificadorFIFO();
 void planificadorRR();
 
-//Funciones de sockets
-char* serializarOperandos(t_Package *package);
-void fill_package(t_Package *package);
-
 //Funciones de comandos
 void correrProceso(char* path);
 void generarPCB(pcb_t* pcb);
-void finalizarProceso(char* pid);
+void finalizarProceso(int pid);
 void estadoProcesos();
 void comandoCPU();
 
@@ -129,32 +125,6 @@ int main(int argc, char** argv) {
 	//Creacion de servidor
 	configurarSocketServidor();
 
-	/*
-	 //Prueba para testeo de sockets con serializacion -SACAR-
-	 //struct sockaddr_in direccionCliente;
-	 struct sockaddr_storage direccionCliente;
-	 unsigned int len = sizeof(direccionCliente);
-	 t_Package package;
-	 package.message = malloc(100);
-	 char *serializedPackage;
-	 clienteCPU = accept(listeningSocket, (struct sockaddr*) &direccionCliente, &len);
-	 log_info(archivoLog, "Se conecta el proceso CPU %i.\n", clienteCPU);
-	 puts("Escriba un texto para mandar");
-	 scanf("%s",package.message);
-	 getchar();
-	 int size = strlen(package.message);
-	 package.message_long=size+ 1;
-	 serializedPackage = serializarOperandos(&package);
-	 //int recibido = recv(clienteCPU, prueba, sizeof(prueba), 0);
-	 //log_info(archivoLog, "Recibi %i %s ", recibido,prueba);
-	 if (send(clienteCPU, serializedPackage, (sizeof(package.message_long)+package.message_long), 0) == -1)
-	 log_error(archivoLog, "Error en el send.\n");
-	 else
-	 log_info(archivoLog, "Mandé \"%s\" a memoria.\n", package.message);
-	 free(serializedPackage);
-	 close(clienteCPU);
-	 */
-
 //Esperar la conexion de CPUs
 //Lo más probable es que se cambie por un hilo que maneje las conexiones - PREGUNTAR
 	struct sockaddr_storage direccionCliente;
@@ -169,7 +139,7 @@ int main(int argc, char** argv) {
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
-/*
+
 	//inicializo los semaforos
 	pthread_mutex_init(&mutexQueueReady, NULL);
 	pthread_mutex_init(&mutexCrearPCB, NULL);
@@ -194,7 +164,7 @@ int main(int argc, char** argv) {
 		pthread_create(&hiloPlanificadorRR, NULL, (void *) planificadorRR, NULL);
 		pthread_join(hiloPlanificadorRR, NULL);
 	}
-*/
+
 	pthread_join(hiloConsola, NULL);
 	return 0;
 }
@@ -209,6 +179,7 @@ void configurarPlanificador(char* config) {
 		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICADOR"));
 	if (config_has_property(configPlanificador, "QUANTUM"))
 		quantum = config_get_int_value(configPlanificador, "QUANTUM");
+
 	config_destroy(configPlanificador);
 }
 
@@ -257,15 +228,24 @@ void manejoDeConsola() {
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
-				//send(clienteCPU, comando.parametro, sizeof(comando.parametro), 0);
-				int tamanioPaquete = sizeof(int)*2+strlen(comando.parametro)+1;
-				char* paqueteSerializado = malloc (tamanioPaquete);
-				serializarChar(serializarInt(paqueteSerializado, 0), comando.parametro);
-				send(clienteCPU, paqueteSerializado, tamanioPaquete, 0);
-				free(paqueteSerializado);
+
+				int* tamanioPaquete = malloc(sizeof(int));
+				*tamanioPaquete = sizeof(int)*2+strlen(comando.parametro)+1;
+
+				char* paquete = malloc(*tamanioPaquete);
+				//TODO Cambiar el procedimiento por uno de los definidos
+				serializarChar(serializarInt(paquete, procedimiento), comando.parametro);
+				send(clienteCPU, paquete, *tamanioPaquete, 0);
+
+				free(paquete);
+				free(tamanioPaquete);
 			}
-			else
-				finalizarProceso(comando.parametro);
+			else{
+				//Cambio el pid string que viene como parametro por un int
+				int pidNumero = strtol(comando.parametro, NULL, 10);
+				finalizarProceso(pidNumero);
+			}
+
 		} else {
 			if (string_equals_ignore_case(comando.comando, "ps"))
 				estadoProcesos();
@@ -274,8 +254,8 @@ void manejoDeConsola() {
 		}
 
 		//Recibo notificacion del cpu para saber como termino la operacion
-		char* notificacion = malloc(11);
-		recv(clienteCPU, notificacion, 11, 0);
+		int* notificacion = malloc(sizeof(int));
+		recibirYDeserializarInt(notificacion, clienteCPU);
 		log_info(archivoLog, "%s", notificacion);
 		
 		//Libero todas las variables dinamicas
@@ -313,14 +293,11 @@ void generarPCB(pcb_t* pcb){
 
 }
 
-void finalizarProceso(char* pid){
+void finalizarProceso(int pid){
 
-	//Cambio el pid string que viene como parametro por un int
-	int pidNumero = strtol(pid, NULL, 10);
-
-	if(buscarEnCola(queueReady, pidNumero) == -1){
-		if(buscarEnCola(queueRunning, pidNumero) == -1)
-			if(buscarEnCola(queueBlocked, pidNumero) == -1)
+	if(buscarEnCola(queueReady, pid) == -1){
+		if(buscarEnCola(queueRunning, pid) == -1)
+			if(buscarEnCola(queueBlocked, pid) == -1)
 				log_error(archivoLog, "No se pudo finalizar el proceso %s", pid);
 			else
 				log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
@@ -347,15 +324,11 @@ int buscarEnCola(t_queue* cola, int pid){
 		if(pcb->processID == pid){
 
 			encontrado++;
-			//TODO Cambiar por serializacion
-			int* notificacion = malloc(sizeof(int));
-			*notificacion = 2;
-			//Enviar al CPU la peticion de eliminar
-			send(clienteCPU, notificacion, sizeof(int), 0);
+			//TODO Enviar al CPU el proceso de finalizar dicho proceso
 			//Recibir la confirmacion de que se pudo eliminar
-			recv(clienteCPU, notificacion, sizeof(int), 0);
+
 			//Pongo como ejemplo que el 10 es el numero para finalizacion exitosa
-			if(*notificacion == 10){
+			if(*notificacion == ){
 				log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
 				free(pcb);
 				break;
@@ -390,34 +363,12 @@ void comandoCPU(){
 
 }
 
-void fill_package(t_Package *package) {
-	/* Me guardo los datos del usuario y el mensaje que manda */
-	scanf("%s", package->message);
-	getchar();
-	//(package->message)[strlen(package->message)] = '\0';
-	package->message_long = strlen(package->message) + 1; // Me guardo lugar para el \0
-}
-
-char* serializarOperandos(t_Package *package) {
-	int total = sizeof(package->message_long) + package->message_long;
-	char *serializedPackage = malloc(total);
-	int offset = 0;
-	int size_to_send;
-	size_to_send = sizeof(package->message_long);
-	memcpy(serializedPackage + offset, &(package->message_long), size_to_send);
-	offset += size_to_send;
-	size_to_send = package->message_long;
-	memcpy(serializedPackage + offset, package->message, size_to_send);
-	return serializedPackage;
-}
-
 //TODO COLOCAR LOS SEMAFOROS PARA CUIDAR LAS QUEUE
 void planificadorFIFO() {
 
 	log_info(archivoLog, "Empieza el thread planificador.\n");
 
 	int* auxCPU = malloc(sizeof(int));
-
 
 	while(1){
 
@@ -430,6 +381,7 @@ void planificadorFIFO() {
 			pthread_mutex_lock(&mutexQueueCPULibre);
 			auxCPU = queue_pop(queueCPULibre);
 			pthread_mutex_unlock(&mutexQueueCPULibre);
+
 			//Cambia el estado del proceso (Acá tambien mutex para cuidar el acceso a estado proceso?)
 			auxPCB->estadoProceso = 1;
 			pthread_mutex_lock(&mutexQueueCPU);
@@ -440,15 +392,27 @@ void planificadorFIFO() {
 			pthread_mutex_unlock(&mutexQueueRunning);
 			log_info(archivoLog, "Empieza la ejecución de ");
 
-//TODO mandarle al cpu el pid del proceso que va a correr
-//Esto se va a saber por protocolos en los que hay que ponerse de acuerdo
+			int* tamanioPaquete = malloc(sizeof(int));
+			*tamanioPaquete = sizeof(int) * 3 + strlen(auxPCB->path) + 1;
+			char* paquete = malloc(*tamanioPaquete);
 
+			 //Enviar el procedimiento para que sepa que es "correr proceso"
+			serializarChar(serializarInt(serializarInt(serializarInt(serializarInt(paquete, 1), auxPCB->processID), auxPCB->programCounter), strlen(auxPCB->path)),
+							auxPCB->path);
+
+			send(clienteCPU, paquete, *tamanioPaquete, 0);
+
+			free(tamanioPaquete);
+			free(paquete);
+
+//TODO mandarle al cpu el pid del proceso que va a correr
 			int* procedimiento = malloc(sizeof(int));
-			recv(clienteCPU, procedimiento, sizeof(int), 0);
+			recibirYDeserializarInt(procedimiento, clienteCPU);
 
 			if(procedimiento == FINALIZOPROCESO){
 				int* formaFinalizacion = malloc(sizeof(int));
-				recv(clienteCPU, formaFinalizacion, sizeof(int), 0);
+				recibirYDeserializarInt(formaFinalizacion, clienteCPU);
+
 				switch(*formaFinalizacion){
 					case RAFAGA:
 						finalizarRafaga(auxPCB, queueReady);
@@ -461,10 +425,7 @@ void planificadorFIFO() {
 				}
 				free(formaFinalizacion);
 			} else {
-				char* pidFinalizar = malloc(4);
-				pidFinalizar = string_itoa(auxPCB->processID);
-				finalizarProceso(pidFinalizar);
-				free(pidFinalizar);
+				finalizarProceso(auxPCB->processID);
 			}
 
 			//Libero la CPU
