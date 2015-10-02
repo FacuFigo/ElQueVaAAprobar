@@ -46,9 +46,9 @@ pthread_t hilo1;
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 void ejecutarmProc(char* ruta, int contador);
-void iniciarmProc(char* comando,int cantPaginas);
-void leermProc(char* comando, int nroPagina);
-void finalizarmProc();
+void iniciarmProc(int pID, char* comando, char* parametro);
+void leermProc(int pID, char* comando, char* parametro);
+void finalizarmProc(int pID);
 void escribirmProc();
 void entradaSalidamProc();
 
@@ -69,38 +69,17 @@ int main(int argc, char** argv) {
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n",
 				ipPlanificador);
 
-//	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
-//		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
-//	else
-//		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
+	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
+		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
+	else
+		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
-	char* mCod = malloc(15);
-	int tamanioCadena,operacion;
-	//recv(socketPlanificador, mCod, 8, 0);
-	//memcpy(&operacion,mCod,4);
-	//memcpy(&tamanioCadena,mCod+4,4);
-	recibirYDeserializarInt(&operacion,socketPlanificador);
-	log_info(archivoLog, "Operacion %d", operacion);
-	//log_info(archivoLog, "Tamaño cadena %d", tamanioCadena);
-	//recv(socketPlanificador, mCod, 5, 0);
-	recibirYDeserializarChar(&mCod,socketPlanificador);
-	log_info(archivoLog, "Recibi %s", mCod);
 
-	send(socketMemoria, mCod, 15, 0);
-
-	char* notificacion = malloc(11);
-	recv(socketMemoria, notificacion, 11, 0);
-	log_info(archivoLog, "%s", notificacion);
-
-	send(socketPlanificador, notificacion, 11, 0);
-
-	free(mCod);
-	free(notificacion);
 
 	// Por ahora pruebo con un solo hilo para el Checkpoint
 
-	pthread_create(&hilo1, NULL, (void *) ejecutarmProc, mCod);
-
+	//pthread_create(&hilo1, NULL, (void *) ejecutarmProc, mCod);
+    //pthread_join(hilo1, NULL);
 
 
 	return 0;
@@ -147,67 +126,67 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 
 
 
-void iniciarmProc(char* comando, int cantPaginas) {
-	int tamPaquete= sizeof(char)*7 + sizeof(int);
+void iniciarmProc(int pID,char*comando, char* parametro) {
+	int tamPaquete= strlen(comando)+1 + sizeof(int)*2;
 	char* paquete=malloc(tamPaquete);
-	serializarChar(&paquete, comando);
-	serializarInt(&paquete, cantPaginas);
+	int cantPaginas=strtol(parametro, NULL, 10);
+	serializarInt(serializarInt(serializarChar(serializarInt(paquete, strlen(comando)), comando), cantPaginas), pID);
 	send(socketMemoria, paquete, tamPaquete, 0);
 	free(paquete);
 }
 
-void finalizarmProc() {
-    char* tamPaquete= sizeof(char) * 30;
+void finalizarmProc(int pID) {
+    char* tamPaquete= strlen("Finalizar proceso %d",pID)+1;
 	char* avisoMemoria = malloc(tamPaquete);
 	char* paquete= malloc(tamPaquete);
-	strcpy(avisoMemoria, "Finalizar proceso PID");
-	serializarChar(&paquete, avisoMemoria);
+	strcpy(avisoMemoria, "Finalizar proceso %d",pID);
+	serializarInt(serializarChar(serializarInt(paquete, strlen(avisoMemoria)), avisoMemoria), pID);
 	send(socketMemoria, paquete, tamPaquete, 0);
 	free(avisoMemoria);
 	free(paquete);
 
 }
 
-void leermProc(char* comando, int nroPagina) {
-	int tamPaquete= sizeof(char)*4 + sizeof(int);
+void leermProc(int pID, char* comando, char* parametro) {
+	int tamPaquete= strlen(comando)+1+sizeof(int)+2;
     char* paquete=malloc(tamPaquete);
-    serializarChar(&paquete, comando);
-    serializarInt(&paquete, nroPagina);
+    int nroPagina=strtol(parametro, NULL, 10);
+    serializarInt(serializarInt(serializarChar(serializarInt(paquete, strlen(comando)), comando), nroPagina), pID);
     send(socketMemoria, paquete, tamPaquete, 0);
     free(paquete);
 }
 
-void ejecutarmProc(char* path, int programCounter) {
+void ejecutarmProc(char* path, int programCounter, int pID) {
 	FILE* mCod;
 	int pc = programCounter; //le llega de plani
-	char* comandoLeido = malloc(sizeof(char)*14 + sizeof(int));
-	char* instruccion = malloc(sizeof(char)*14);
-	char** leidoSplit = malloc(sizeof(char)*3);
-	leidoSplit[0]=malloc(sizeof(char)*14);
-	leidoSplit[1]=malloc(sizeof(int));
-	char* resultadosTot = malloc(sizeof(char)*100);  //ver calloc
-	char* paqueteRafaga=malloc(sizeof(char)*100);
+	char* comandoLeido = malloc(sizeof(char)*14);
+	char* instruccion = malloc(sizeof(char)*10);
+	char** leidoSplit = malloc(sizeof(char)*2);
+	leidoSplit[0]=malloc(sizeof(char)*10);
+	leidoSplit[1]=malloc(sizeof(char));
+	char* resultadosTot = malloc(sizeof(char)*200);  //ver calloc
+	char* paqueteRafaga=malloc(sizeof(char)*200);
 
 	mCod = fopen(path, "r");
-	fgets(comandoLeido, 30, mCod);
+	fgets(comandoLeido, 20, mCod);
 
 	leidoSplit = string_split(comandoLeido, " ");
 	instruccion = leidoSplit[0];
 
 	while (!feof(mCod)) {
-		pc += 1;
+		pc ++;
 
 		if (string_equals_ignore_case(instruccion, "iniciar")) {
-			iniciarmProc(leidoSplit[0], leidoSplit[1]);
+			iniciarmProc(pID,leidoSplit[0], leidoSplit[1]);
 			char* resultado = malloc(sizeof(char)*25);
 			recibirYDeserializarChar(&resultado, socketMemoria);
 			string_append_with_format(&resultadosTot, "%s!", resultado);
-			log_info(archivoLog, "Instruccion ejecutada:iniciar %d Proceso:PID Resultado: %s.", leidoSplit[1], resultado);
+			log_info(archivoLog, "Instruccion ejecutada:%s Proceso:%d Resultado: %s.", comandoLeido, pID, resultado);
 			free(resultado);
 		}
 		if (string_equals_ignore_case(instruccion, "leer")) {
-			leermProc(leidoSplit[0], leidoSplit[1]);
-			log_info(archivoLog, "Instruccion ejecutada:leer %d", leidoSplit[1]);
+			leermProc(pID, leidoSplit[0], leidoSplit[1]);
+			log_info(archivoLog, "Instruccion ejecutada:%s Proceso:%d",comandoLeido, pID);
 		}
 		if (string_equals_ignore_case(instruccion, "escribir")) { //proximamente, solo en sisop
 			escribirmProc();
@@ -216,27 +195,29 @@ void ejecutarmProc(char* path, int programCounter) {
 			entradaSalidamProc();
 		}
 		if (string_equals_ignore_case(instruccion, "finalizar")) {
-			finalizarmProc();
+			finalizarmProc(pID);
 			char* resultado = malloc(sizeof(char)*25);
-			recibirYdeserializarChar(&resultado, socketMemoria);
+			recibirYDeserializar(&resultado, socketMemoria);
 			string_append_with_format(&resultadosTot, "%s!", resultado);
-			log_info(archivoLog, "Instruccion ejecutada:finalizar Resultado:%s", resultado);
+			log_info(archivoLog, "Instruccion ejecutada:%s Proceso:%d Resultado:%s",comandoLeido, pID, resultado);
 			free(resultado);
 		}
 
 		sleep(retardo);
-		fgets(comandoLeido, 30, mCod);
+		fgets(comandoLeido, 20, mCod);
 
 	}
 
-	log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso: PID");
+	log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 	free(comandoLeido);
 	free(instruccion);
+	free(leidoSplit[0]);
+	free(leidoSplit[1]);
 	free(leidoSplit);
 	fclose(mCod);
 
-	serializarChar(&paqueteRafaga, resultadosTot);
-	send(socketPlanificador, paqueteRafaga, 100, 0);
+	serializarChar(serializarInt(paqueteRafaga, strlen(resultadosTot)), resultadosTot);
+	send(socketPlanificador, paqueteRafaga, 200, 0);
 	free(resultadosTot);
 	free(paqueteRafaga);
 
