@@ -199,15 +199,27 @@ void ejecutarmProc(char* path, int programCounter) {
 
 		if (string_equals_ignore_case(instruccion, "iniciar")) {
 			iniciarmProc(leidoSplit[0], leidoSplit[1]);
-			char* resultado = malloc(sizeof(char)*25);
-			recibirYDeserializarChar(&resultado, socketMemoria);
-			string_append_with_format(&resultadosTot, "%s!", resultado);
-			log_info(archivoLog, "Instruccion ejecutada:iniciar %d Proceso:PID Resultado: %s.", leidoSplit[1], resultado);
-			free(resultado);
+			int operacion;
+			recibirYDeserializarInt(&operacion, socketMemoria);
+			if (operacion == INICIOMEMORIA) {
+				log_info(archivoLog, "Instruccion ejecutada:iniciar %d Proceso:PID.", leidoSplit[1]);
+				string_append_with_format(&resultadosTot, "mProc PID - iniciado");  //PID hardcodeado --> de donde sale?
+			} else if (operacion == FALLOINICIOMEMORIA) {
+				log_info(archivoLog, "Instruccion ejecutada:iniciar %d Proceso:PID. FALLO!", leidoSplit[1]);
+				string_append_with_format(&resultadosTot, "mProc PID - fallo");
+			}
+
 		}
 		if (string_equals_ignore_case(instruccion, "leer")) {
 			leermProc(leidoSplit[0], leidoSplit[1]);
+			int operacion;
+			char* resultado = malloc(sizeof(char)*25);
+			recibirYDeserializarInt(&operacion, socketMemoria);
+			recibirYDeserializarChar(&resultado, socketMemoria);
+			if (operacion == LEERMEMORIA) {
+			string_append_with_format(&resultadosTot, "%s!", resultado);
 			log_info(archivoLog, "Instruccion ejecutada:leer %d", leidoSplit[1]);
+			free(resultado);
 		}
 		if (string_equals_ignore_case(instruccion, "escribir")) { //proximamente, solo en sisop
 			escribirmProc();
