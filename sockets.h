@@ -8,6 +8,15 @@
 #ifndef SOCKETS_H_
 #define SOCKETS_H_
 
+typedef enum {
+	INICIARPROCESO,
+	ENTRADASALIDA,
+	INICIOMEMORIA,
+	LEERMEMORIA,
+	ESCRIBIRMEMORIA,
+	FINALIZARPROCESO
+} operacion_t;
+
 char* serializarChar(char* paqueteSerializado,char* texto) {
 	int tamTexto = strlen(texto)+1;
 	int offset = 0;
