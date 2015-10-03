@@ -167,9 +167,9 @@ void ejecutarmProc() {
 	char* instruccion;
 	char* resultadosTot = string_new();
 	char* paqueteRafaga;
-	recibirYDeserializarChar(&path, socketPlanificador);
-	recibirYDeserializarInt(&programCounter, socketPlanificador);
 	recibirYDeserializarInt(&pID, socketPlanificador);
+	recibirYDeserializarInt(&programCounter, socketPlanificador);
+	recibirYDeserializarChar(&path, socketPlanificador);
 
 	mCod = fopen(path, "r");
 	fgets(comandoLeido, 14, mCod);
@@ -225,7 +225,7 @@ void ejecutarmProc() {
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
 				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d finalizado",comandoLeido, pID);
-				char* aux = string_from_format(&resultadosTot, "mProc %d finalizado",pID);
+				char* aux = string_from_format("mProc %d finalizado",pID);
 				string_append(&resultadosTot, aux);
 			} else {
 				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d error al finalizar",comandoLeido, pID);
@@ -244,9 +244,9 @@ void ejecutarmProc() {
 	free(leidoSplit[1]);
 	free(leidoSplit);
 	fclose(mCod);
-	tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int);
+	tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 	paqueteRafaga = malloc(tamanioPaquete);
-	serializarChar(paqueteRafaga, resultadosTot);
+	serializarInt(serializarChar(paqueteRafaga, resultadosTot), RAFAGAPROCESO);
 	send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 	free(resultadosTot);
 	free(paqueteRafaga);
