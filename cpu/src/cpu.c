@@ -44,7 +44,7 @@ pthread_t hilo1;
 
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
-void ejecutarmProc(char* ruta, int contador);
+void ejecutarmProc(char* ruta, int contador, int pID);
 void iniciarmProc(int pID, char* comando, char* parametro);
 void leermProc(int pID, char* comando, char* parametro);
 void finalizarmProc(int pID);
@@ -164,25 +164,24 @@ void leermProc(int pID, char* comando, char* parametro) {
 void ejecutarmProc(char* path, int programCounter, int pID) {
 	FILE* mCod;
 	int pc = programCounter; //le llega de plani
-	char* comandoLeido = malloc(sizeof(char) * 14);
-	char* instruccion = malloc(sizeof(char) * 10);
-	char** leidoSplit = malloc(sizeof(char) * 2);
-	leidoSplit[0] = malloc(sizeof(char) * 10);
-	leidoSplit[1] = malloc(sizeof(char));
-	char* resultadosTot = malloc(sizeof(char) * 200);  //ver calloc
-	char* paqueteRafaga = malloc(sizeof(char) * 200);
+	char* comandoLeido = malloc(14);
+	char* instruccion;
+	char* parametro;
+	char* resultadosTot = malloc(200);  //ver calloc
+	char* paqueteRafaga = malloc(200);
 
 	mCod = fopen(path, "r");
 	fgets(comandoLeido, 20, mCod);
 
-	leidoSplit = string_split(comandoLeido, " ");
+	char** leidoSplit = string_split(comandoLeido, " ");
 	instruccion = leidoSplit[0];
+	parametro = leidoSplit[1];
 
 	while (!feof(mCod)) {
 		pc++;
 
 		if (string_equals_ignore_case(instruccion, "iniciar")) {
-			iniciarmProc(leidoSplit[0], leidoSplit[1]);
+			iniciarmProc(pID, instruccion, parametro);
 			int verificador;
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
@@ -200,7 +199,7 @@ void ejecutarmProc(char* path, int programCounter, int pID) {
 
 		}
 		if (string_equals_ignore_case(instruccion, "leer")) {
-			leermProc(leidoSplit[0], leidoSplit[1]);
+			leermProc(pID, instruccion, parametro);
 			int verificador;
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
