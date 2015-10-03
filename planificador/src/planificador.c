@@ -116,7 +116,7 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino);
 int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
-	archivoLog = log_create("log_Planificador", "Planificador", 1, 0);
+	archivoLog = log_create("log_Planificador", "Planificador", 0, 0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
 
 	configurarPlanificador(argv[1]);
@@ -128,11 +128,18 @@ int main(int argc, char** argv) {
 	queueCPU = queue_create();
 	queueCPULibre = queue_create();
 
+	//inicializo los semaforos
+	pthread_mutex_init(&mutexQueueReady, NULL);
+	pthread_mutex_init(&mutexCrearPCB, NULL);
+	pthread_mutex_init(&mutexQueueRunning, NULL);
+	pthread_mutex_init(&mutexQueueCPU, NULL);
+	pthread_mutex_init(&mutexQueueCPULibre, NULL);
+	pthread_mutex_init(&mutexQueueBlocked, NULL);
+	pthread_mutex_init(&mutex, NULL);
+
 	//Creacion de servidor
 	configurarSocketServidor();
 
-//Esperar la conexion de CPUs
-//Lo más probable es que se cambie por un hilo que maneje las conexiones - PREGUNTAR
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
@@ -145,15 +152,6 @@ int main(int argc, char** argv) {
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
-
-	//inicializo los semaforos
-	pthread_mutex_init(&mutexQueueReady, NULL);
-	pthread_mutex_init(&mutexCrearPCB, NULL);
-	pthread_mutex_init(&mutexQueueRunning, NULL);
-	pthread_mutex_init(&mutexQueueCPU, NULL);
-	pthread_mutex_init(&mutexQueueCPULibre, NULL);
-	pthread_mutex_init(&mutexQueueBlocked, NULL);
-	pthread_mutex_init(&mutex, NULL);
 
 	//Comienza el thread de control de tiempo
 	//pthread_t hiloControlTiempo;
@@ -261,14 +259,18 @@ void manejoDeConsola() {
 void correrProceso(char* path) {
 
 	pthread_mutex_lock(&mutexCrearPCB);
+
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
 	generarPCB(pcbProc);
 	pcbProc->path = string_duplicate(path);
+
 	pthread_mutex_unlock(&mutexCrearPCB);
 
 	//Agrego a la cola READY
 	pthread_mutex_lock(&mutexQueueReady);
+
 	queue_push(queueReady, pcbProc);
+
 	pthread_mutex_unlock(&mutexQueueReady);
 
 }
@@ -301,7 +303,6 @@ void finalizarProceso(int pid){
 	}
 }
 
-//¿Una mejor forma seria que devuelva el pcb encontrado y lo elimino fuera?
 int buscarYEliminarEnCola(t_queue* cola, int pid){
 
 	pcb_t* pcb = malloc(sizeof(pcb_t));
@@ -312,20 +313,21 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 	while(!queue_is_empty(cola)){
 
 		pthread_mutex_lock(&mutex);
+
 		pcb = queue_pop(cola);
+
 		pthread_mutex_unlock(&mutex);
+
 		if(pcb->processID == pid){
 
 			encontrado++;
 
-			int* tamanioPaquete = malloc(sizeof(int));
-			*tamanioPaquete = sizeof(int) * 2;
-			char* paquete = malloc(*tamanioPaquete);
+			int tamanioPaquete = sizeof(int) * 2;
+			char* paquete = malloc(tamanioPaquete);
 			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
 
-			send(clienteCPU, paquete, *tamanioPaquete, 0);
+			send(clienteCPU, paquete, tamanioPaquete, 0);
 
-			free(tamanioPaquete);
 			free(paquete);
 
 			int* notificacion = malloc(sizeof(int));
@@ -340,10 +342,13 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 			}
 
 			free(notificacion);
+			free(paquete);
 
 		}else{
 			pthread_mutex_lock(&mutex);
+
 			queue_push(queueAuxiliar, pcb);
+
 			pthread_mutex_unlock(&mutex);
 		}
 
@@ -351,8 +356,10 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 
 	while(!queue_is_empty(queueAuxiliar)){
 		pthread_mutex_lock(&mutex);
+
 		pcb = queue_pop(queueAuxiliar);
 		queue_push(cola, pcb);
+
 		pthread_mutex_unlock(&mutex);
 	}
 
@@ -377,39 +384,52 @@ void planificadorFIFO() {
 
 	int* auxCPU = malloc(sizeof(int));
 
+	int tamanioPaquete;
+
 	while(1){
 
 		if (! (queue_is_empty(queueCPULibre) && queue_is_empty(queueReady))){
 
 			pcb_t* auxPCB = malloc(sizeof(pcb_t));
 			pthread_mutex_lock(&mutexQueueReady);
+
 			auxPCB = queue_pop(queueReady);
+			log_info(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
+
 			pthread_mutex_unlock(&mutexQueueReady);
+
 			pthread_mutex_lock(&mutexQueueCPULibre);
+
 			auxCPU = queue_pop(queueCPULibre);
+
 			pthread_mutex_unlock(&mutexQueueCPULibre);
 
 			//Cambia el estado del proceso (Acá tambien mutex para cuidar el acceso a estado proceso?)
 			auxPCB->estadoProceso = 1;
+
 			pthread_mutex_lock(&mutexQueueCPU);
+
 			queue_push(queueCPU, auxCPU);
+
 			pthread_mutex_unlock(&mutexQueueCPU);
+
 			pthread_mutex_lock(&mutexQueueRunning);
+
 			queue_push(queueRunning, auxPCB);
+
 			pthread_mutex_unlock(&mutexQueueRunning);
+
 			log_info(archivoLog, "Empieza la ejecución de ");
 
 			//Envio el proceso que va a correr despues
-			int* tamanioPaquete = malloc(sizeof(int));
-			*tamanioPaquete = sizeof(int) * 3 + strlen(auxPCB->path) + 1;
-			char* paquete = malloc(*tamanioPaquete);
+			tamanioPaquete = sizeof(int) * 3 + strlen(auxPCB->path) + 1;
+			char* paquete = malloc(tamanioPaquete);
 
 			serializarChar(serializarInt(serializarInt(serializarInt(serializarInt(paquete, 1), auxPCB->processID), auxPCB->programCounter), strlen(auxPCB->path)),
 							auxPCB->path);
 
-			send(clienteCPU, paquete, *tamanioPaquete, 0);
+			send(clienteCPU, paquete, tamanioPaquete, 0);
 
-			free(tamanioPaquete);
 			free(paquete);
 
 			int* procedimiento = malloc(sizeof(int));
@@ -422,7 +442,14 @@ void planificadorFIFO() {
 				switch(*formaFinalizacion){
 					case RAFAGA:
 						finalizarRafaga(auxPCB, queueReady);
+
 						log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
+
+						recibirYDeserializarInt(&tamanioPaquete, clienteCPU);
+						char* resultadoTotal = malloc(tamanioPaquete);
+						log_info(archivoLog, resultadoTotal);
+						free(resultadoTotal);
+
 						break;
 					case BLOQUEAR:
 						finalizarRafaga(auxPCB, queueBlocked);
@@ -435,10 +462,13 @@ void planificadorFIFO() {
 			}
 
 			//Libero la CPU
-			auxCPU	= queue_pop(queueCPU);
 			pthread_mutex_lock(&mutexQueueCPULibre);
+
+			auxCPU	= queue_pop(queueCPU);
 			queue_push(queueCPULibre, auxCPU);
+
 			pthread_mutex_unlock(&mutexQueueCPULibre);
+
 			free(procedimiento);
 		}
 	}
@@ -454,21 +484,31 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 	while(!queue_is_empty(queueRunning)){
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID){
+
 			pthread_mutex_lock(&mutex);
+
 			queue_push(colaDestino, pcb);
+
 			pthread_mutex_unlock(&mutex);
 			break;
 		} else {
 			pthread_mutex_lock(&mutex);
+
 			queue_push(queueAux, aux);
+
 			pthread_mutex_unlock(&mutex);
 		}
 	}
 
 	while(!queue_is_empty(queueAux)){
-		aux = queue_pop(queueAux);
+
+		pthread_mutex_lock(&mutex);
 		pthread_mutex_lock(&mutexQueueRunning);
+
+		aux = queue_pop(queueAux);
 		queue_push(queueRunning, aux);
+
+		pthread_mutex_unlock(&mutex);
 		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 
