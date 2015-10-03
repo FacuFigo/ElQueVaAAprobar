@@ -35,6 +35,15 @@
 
 #define BACKLOG 5
 
+typedef enum {
+	INICIARPROCESO,
+	ENTRADASALIDA,
+	INICIOMEMORIA,
+	LEERMEMORIA,
+	ESCRIBIRMEMORIA,
+	FINALIZARPROCESO
+} operacion_t;
+
 t_log* archivoLog;
 int puertoEscucha;
 char* algoritmo;
@@ -57,9 +66,6 @@ pthread_mutex_t mutexQueueRunning;
 pthread_mutex_t mutexQueueCPU;
 pthread_mutex_t mutexQueueCPULibre;
 pthread_mutex_t mutexQueueBlocked;
-
-
-
 
 int pIDContador = 1;
 
@@ -104,7 +110,7 @@ void estadoProcesos();
 void comandoCPU();
 
 //Funciones de planificador
-int buscarEnCola(t_queue* cola, int pid);
+int buscarYEliminarEnCola(t_queue* cola, int pid);
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino);
 
 int main(int argc, char** argv) {
@@ -135,7 +141,7 @@ int main(int argc, char** argv) {
 	//Meto la cpu que se conecta a la cola de libres
 	queue_push(queueCPULibre, &clienteCPU);
 
-//TODO Hilo multiplexor
+//TODO Hilos Control de tiempo e Hilo multiplexor
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
@@ -228,24 +234,12 @@ void manejoDeConsola() {
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
-
-				int* tamanioPaquete = malloc(sizeof(int));
-				*tamanioPaquete = sizeof(int)*2+strlen(comando.parametro)+1;
-
-				char* paquete = malloc(*tamanioPaquete);
-				//TODO Cambiar el procedimiento por uno de los definidos
-				serializarChar(serializarInt(paquete, procedimiento), comando.parametro);
-				send(clienteCPU, paquete, *tamanioPaquete, 0);
-
-				free(paquete);
-				free(tamanioPaquete);
 			}
 			else{
 				//Cambio el pid string que viene como parametro por un int
 				int pidNumero = strtol(comando.parametro, NULL, 10);
 				finalizarProceso(pidNumero);
 			}
-
 		} else {
 			if (string_equals_ignore_case(comando.comando, "ps"))
 				estadoProcesos();
@@ -258,7 +252,6 @@ void manejoDeConsola() {
 		recibirYDeserializarInt(notificacion, clienteCPU);
 		log_info(archivoLog, "%s", notificacion);
 		
-		//Libero todas las variables dinamicas
 		free(notificacion);
 		free(comando.comando);
 		free(comando.parametro);
@@ -295,9 +288,9 @@ void generarPCB(pcb_t* pcb){
 
 void finalizarProceso(int pid){
 
-	if(buscarEnCola(queueReady, pid) == -1){
-		if(buscarEnCola(queueRunning, pid) == -1)
-			if(buscarEnCola(queueBlocked, pid) == -1)
+	if(buscarYEliminarEnCola(queueReady, pid) == -1){
+		if(buscarYEliminarEnCola(queueRunning, pid) == -1)
+			if(buscarYEliminarEnCola(queueBlocked, pid) == -1)
 				log_error(archivoLog, "No se pudo finalizar el proceso %s", pid);
 			else
 				log_info(archivoLog, "Finaliza el proceso %i.\n", pid);
@@ -309,7 +302,7 @@ void finalizarProceso(int pid){
 }
 
 //¿Una mejor forma seria que devuelva el pcb encontrado y lo elimino fuera?
-int buscarEnCola(t_queue* cola, int pid){
+int buscarYEliminarEnCola(t_queue* cola, int pid){
 
 	pcb_t* pcb = malloc(sizeof(pcb_t));
 	t_queue* queueAuxiliar = queue_create();
@@ -324,15 +317,29 @@ int buscarEnCola(t_queue* cola, int pid){
 		if(pcb->processID == pid){
 
 			encontrado++;
-			//TODO Enviar al CPU el proceso de finalizar dicho proceso
-			//Recibir la confirmacion de que se pudo eliminar
 
-			//Pongo como ejemplo que el 10 es el numero para finalizacion exitosa
-			if(*notificacion == ){
+			int* tamanioPaquete = malloc(sizeof(int));
+			*tamanioPaquete = sizeof(int) * 2;
+			char* paquete = malloc(*tamanioPaquete);
+			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
+
+			send(clienteCPU, paquete, *tamanioPaquete, 0);
+
+			free(tamanioPaquete);
+			free(paquete);
+
+			int* notificacion = malloc(sizeof(int));
+			recibirYDeserializarInt(notificacion, clienteCPU);
+
+			if(*notificacion != -1){
 				log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
 				free(pcb);
 				break;
+			}else{
+				log_error(archivoLog, "No se pudo eliminar el proceso %i.\n", pid);
 			}
+
+			free(notificacion);
 
 		}else{
 			pthread_mutex_lock(&mutex);
@@ -392,11 +399,11 @@ void planificadorFIFO() {
 			pthread_mutex_unlock(&mutexQueueRunning);
 			log_info(archivoLog, "Empieza la ejecución de ");
 
+			//Envio el proceso que va a correr despues
 			int* tamanioPaquete = malloc(sizeof(int));
 			*tamanioPaquete = sizeof(int) * 3 + strlen(auxPCB->path) + 1;
 			char* paquete = malloc(*tamanioPaquete);
 
-			 //Enviar el procedimiento para que sepa que es "correr proceso"
 			serializarChar(serializarInt(serializarInt(serializarInt(serializarInt(paquete, 1), auxPCB->processID), auxPCB->programCounter), strlen(auxPCB->path)),
 							auxPCB->path);
 
@@ -405,7 +412,6 @@ void planificadorFIFO() {
 			free(tamanioPaquete);
 			free(paquete);
 
-//TODO mandarle al cpu el pid del proceso que va a correr
 			int* procedimiento = malloc(sizeof(int));
 			recibirYDeserializarInt(procedimiento, clienteCPU);
 

@@ -35,6 +35,15 @@
 
 t_log* archivoLog;
 
+typedef enum {
+	INICIARPROCESO,
+	ENTRADASALIDA,
+	INICIOMEMORIA,
+	LEERMEMORIA,
+	ESCRIBIRMEMORIA,
+	FINALIZARPROCESO
+} operacion_t;
+
 int puertoEscucha;
 char* ipSwap;
 int puertoSwap;
@@ -53,8 +62,6 @@ typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
 void configurarAdmMemoria(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int configurarSocketServidor();
-int** iniciarmProc(int cantPaginas);
-finalizarmProc(int** tablaPaginas);
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -76,48 +83,10 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
 
-	char* mCod = malloc(15);
-	recv(clienteCPU, mCod, 15, 0);
-	log_info(archivoLog, "Recibi %s", mCod);
+	pthread_t admDeMemoria;
+	pthread_create(&admDeMemoria, NULL, (void *)admDeMemoria, NULL);
 
-
-
-	int** tablaDePaginas;
-	char* instruccion=malloc(15);
-	char** instruccionSplit=malloc(20);
-	instruccionSplit= string_split(mCod, " ");
-	instruccion= instruccionSplit[0];
-
-
-	switch(instruccion){
-	case iniciar:
-		iniciarmProc(&tablaDePaginas, instruccionSplit[1]);
-		break;
-	case leer:
-		leermProc(mCod);
-		break;
-	case finalizar:
-		finalizarmProc(&tablaDePaginas);
-		break;
-
-	}
-
-
-
-
-	send(socketSwap, mCod, 15, 0);
-
-	char* notificacion = malloc(11);
-	recv(socketSwap, notificacion, 11, 0);
-	log_info(archivoLog, "%s", notificacion);
-
-	send(clienteCPU, notificacion, 11, 0);
-
-
-
-	free(mCod);
-	free(notificacion);
-
+	pthread_join(admDeMemoria, NULL);
 
 	return 0;
 }
@@ -147,7 +116,6 @@ void configurarAdmMemoria(char* config) {
 	config_destroy(configurarAdmMemoria);
 }
 
-
 int configurarSocketCliente(char* ip, int puerto, int* s) {
 	struct sockaddr_in direccionServidor;
 	direccionServidor.sin_family = AF_INET;
@@ -162,8 +130,6 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 
 	return 1;
 }
-
-
 
 int configurarSocketServidor() {
 
@@ -190,52 +156,122 @@ int configurarSocketServidor() {
 	return 1;
 }
 
+void admDeMemoria(){
 
- iniciarmProc(int** tabla, int cantPaginas){
-    tabla=malloc(sizeof(int)*cantPaginas);
-	char* notificacion=malloc(sizeof(char)*20);
-	char* avisoSwap= malloc(40);
-	if (tabla== NULL){
-		strcpy(notificacion, "mProc PID - Fallo");
-		send(clienteCPU, notificacion, sizeof(char)*20, 0);
+	while(1){
+		int instruccion;
+		recibirYDeserializarInt(&instruccion, clienteCPU);
+
+		switch(instruccion){
+		case INICIOMEMORIA:{
+
+			int pid, cantPaginas, tamanioPaquete, verificador;
+			char *paquete;
+
+			recibirYDeserializarInt(&pid, clienteCPU);
+			recibirYDeserializarInt(&cantPaginas, clienteCPU);
+
+			tamanioPaquete = sizeof(int) * 3;
+			paquete = malloc(tamanioPaquete);
+
+			//Le pido a Swap que inicialice un proceso:
+			serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pid), cantPaginas);
+
+			send(socketSwap, paquete, tamanioPaquete, 0);
+
+			free(paquete);//Se puede sacar este free?
+
+			//Recibo respuesta de Swap:
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1)
+				log_info(archivoLog, "Memoria inicializada");
+			else
+				log_info(archivoLog,"Fallo al inicializar memoria");
+
+			paquete = malloc(sizeof(int));//realloc?
+			//Le contesto a CPU
+			serializarInt(paquete,verificador);
+			send(clienteCPU, paquete, sizeof(int),0);
+
+			free(paquete);
+
+			break;
+		}
+		case LEERMEMORIA:{
+
+			int pid, pagina, tamanioPaquete, verificador;
+			char *paquete, *respuesta;
+			recibirYDeserializarInt(&pid, clienteCPU);
+			recibirYDeserializarInt(&pagina, clienteCPU);
+
+			tamanioPaquete = sizeof(int) * 3;
+			paquete = malloc(tamanioPaquete);
+
+			serializarInt(serializarInt(serializarInt(paquete, LEERMEMORIA), pid), pagina);
+
+			send(socketSwap, paquete, tamanioPaquete, 0);
+
+			free(paquete);//está de más este free?
+
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1){
+				recibirYDeserializarChar(&respuesta,socketSwap);
+				log_info(archivoLog, "Página %d leida: %s",pagina,respuesta);
+				tamanioPaquete = sizeof(int)+strlen(respuesta)+1;
+				paquete = malloc(tamanioPaquete);//realloc?
+				serializarChar(serializarInt(paquete, verificador),respuesta);
+				free(respuesta);
+			}
+			else{
+				log_info(archivoLog,"Fallo al leer página %d.", pagina);
+				tamanioPaquete = sizeof(int);
+				paquete = malloc(sizeof(int));
+				serializarInt(paquete,verificador);
+			}
+			//Le contesto a CPU
+			send(clienteCPU,paquete,tamanioPaquete,0);
+
+			free(paquete);
+
+			break;
+		}
+		case FINALIZARPROCESO:
+		{
+			int pid, tamanioPaquete, verificador;
+			char *paquete;
+
+			recibirYDeserializarInt(&pid, clienteCPU);
+
+			tamanioPaquete = sizeof(int) * 2;
+			paquete = malloc(tamanioPaquete);
+
+			//Le pido a Swap que finalice un proceso:
+			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
+
+			send(socketSwap, paquete, tamanioPaquete, 0);
+
+			free(paquete);//Se puede sacar este free?
+
+			//Recibo la respuesta de Swap:
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1)
+				log_info(archivoLog, "Proceso finalizado de memoria.");
+			else
+				log_info(archivoLog,"Fallo al finalizar proceso.");
+
+			paquete = malloc(sizeof(int));//realloc?
+			//Le contesto a CPU
+			serializarInt(paquete,verificador);
+			send(clienteCPU, paquete, sizeof(int),0);
+
+			free(paquete);
+
+			break;
+		}
+		}
+
 	}
-	else{
-		strcpy(notificacion, "mProc PID - Iniciado");
-				send(clienteCPU, notificacion, sizeof(char)*20, 0);
-				log_info(archivoLog, "Proceso mProc PID creado con %d paginas asignadas",cantPaginas);
-	}
-
-	strcpy(avisoSwap, "Se creo proceso PID con %d paginas",cantPaginas);
-	send(socketSwap, avisoSwap, 40, 0);
-	free(avisoSwap);
-	free(notificacion);
 }
-
-
-finalizarmProc(int** tablaPaginas){   //quizas tambien limpie la TLB, no decidi que tipo de estructura hacer
-	char* avisoSwap=malloc(40);
-	char avisoCPU=malloc(sizeof(char)*20);
-	liberarTabla(tablaPaginas);
-	strcpy(avisoSwap, "Proceso PID finalizado");
-	send(socketSwap, avisoSwap, 40, 0);
-	strcpy(avisoCPU, "mProc PID finalizado");
-	send(clienteCPU, avisoCPU, 20, 0);
-
-	free(avisoSwap);
-	free(avisoCPU);
-}
-
-
-leermProc(char* instruccion){
-	send(socketSwap, instruccion, 15, 0);
-
-}
-
-
- liberarTabla(int** tabla, int cantPagina){
-	 int i=0;
-	 while(tabla[i]!= '/0')
-		 free(tabla[i]);
-	 free(tabla);
-
- }
