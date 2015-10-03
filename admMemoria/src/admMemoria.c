@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
-void configurarAdmMemoria(char* config) {
+void configurarAdmMemoria(char* config) {operacion_t
 
 	t_config* configurarAdmMemoria = config_create(config);
 	if (config_has_property(configurarAdmMemoria, "PUERTO_ESCUCHA"))
