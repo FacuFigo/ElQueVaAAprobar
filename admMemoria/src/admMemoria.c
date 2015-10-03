@@ -165,32 +165,112 @@ void admDeMemoria(){
 		switch(instruccion){
 		case INICIOMEMORIA:{
 
-			int* pid = malloc(sizeof(int));
-			int* cantPaginas = malloc(sizeof(int));
+			int pid, cantPaginas, tamanioPaquete, verificador;
+			char *paquete;
 
-			recibirYDeserializarInt(pid, clienteCPU);
-			recibirYDeserializarInt(cantPaginas, clienteCPU);
+			recibirYDeserializarInt(&pid, clienteCPU);
+			recibirYDeserializarInt(&cantPaginas, clienteCPU);
 
-			int* tamanioPaquete = malloc(sizeof(int));
-			*tamanioPaquete = sizeof(int) * 3;
-			char* paquete = malloc(*tamanioPaquete);
+			tamanioPaquete = sizeof(int) * 3;
+			paquete = malloc(tamanioPaquete);
 
-			//TODO Corregir warning
+			//Le pido a Swap que inicialice un proceso:
 			serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pid), cantPaginas);
 
-			send(clienteCPU, paquete, *tamanioPaquete, 0);
+			send(socketSwap, paquete, tamanioPaquete, 0);
 
-			free(tamanioPaquete);
+			free(paquete);//Se puede sacar este free?
+
+			//Recibo respuesta de Swap:
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1)
+				log_info(archivoLog, "Memoria inicializada");
+			else
+				log_info(archivoLog,"Fallo al inicializar memoria");
+
+			paquete = malloc(sizeof(int));//realloc?
+			//Le contesto a CPU
+			serializarInt(paquete,verificador);
+			send(clienteCPU, paquete, sizeof(int),0);
+
 			free(paquete);
 
 			break;
 		}
-		case LEERMEMORIA:
+		case LEERMEMORIA:{
+
+			int pid, pagina, tamanioPaquete, verificador;
+			char *paquete, *respuesta;
+			recibirYDeserializarInt(&pid, clienteCPU);
+			recibirYDeserializarInt(&pagina, clienteCPU);
+
+			tamanioPaquete = sizeof(int) * 3;
+			paquete = malloc(tamanioPaquete);
+
+			serializarInt(serializarInt(serializarInt(paquete, LEERMEMORIA), pid), pagina);
+
+			send(socketSwap, paquete, tamanioPaquete, 0);
+
+			free(paquete);//está de más este free?
+
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1){
+				recibirYDeserializarChar(&respuesta,socketSwap);
+				log_info(archivoLog, "Página %d leida: %s",pagina,respuesta);
+				tamanioPaquete = sizeof(int)+strlen(respuesta)+1;
+				paquete = malloc(tamanioPaquete);//realloc?
+				serializarChar(serializarInt(paquete, verificador),respuesta);
+				free(respuesta);
+			}
+			else{
+				log_info(archivoLog,"Fallo al leer página %d.", pagina);
+				tamanioPaquete = sizeof(int);
+				paquete = malloc(sizeof(int));
+				serializarInt(paquete,verificador);
+			}
+			//Le contesto a CPU
+			send(clienteCPU,paquete,tamanioPaquete,0);
+
+			free(paquete);
 
 			break;
+		}
 		case FINALIZARPROCESO:
+		{
+			int pid, tamanioPaquete, verificador;
+			char *paquete;
+
+			recibirYDeserializarInt(&pid, clienteCPU);
+
+			tamanioPaquete = sizeof(int) * 2;
+			paquete = malloc(tamanioPaquete);
+
+			//Le pido a Swap que finalice un proceso:
+			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
+
+			send(socketSwap, paquete, tamanioPaquete, 0);
+
+			free(paquete);//Se puede sacar este free?
+
+			//Recibo la respuesta de Swap:
+			recibirYDeserializarInt(&verificador, socketSwap);
+
+			if (verificador != -1)
+				log_info(archivoLog, "Proceso finalizado de memoria.");
+			else
+				log_info(archivoLog,"Fallo al finalizar proceso.");
+
+			paquete = malloc(sizeof(int));//realloc?
+			//Le contesto a CPU
+			serializarInt(paquete,verificador);
+			send(clienteCPU, paquete, sizeof(int),0);
+
+			free(paquete);
 
 			break;
+		}
 		}
 
 	}
