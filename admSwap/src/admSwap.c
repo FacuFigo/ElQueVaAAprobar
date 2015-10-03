@@ -88,7 +88,7 @@ void asignarEspacio(int paginaInicio, process_t* proceso);
 int liberarMemoria(int pid);
 void liberarEspacioEnArchivo(int numeroDePagina);
 void escribirLeer();
-char* leerPagina(int numeroPagina);
+char* leerPagina(int pid, int numeroPagina);
 void escribirPagina(int paginaAEscribir, char* contenido);
 
 int main(int argc, char** argv) {
@@ -271,11 +271,14 @@ void admDeEspacios(){
 
 			case LEERMEMORIA:{
 
+				int* pid = malloc(sizeof(int));
+				recibirYDeserializarInt(pid, clienteMemoria);
+
 				int* paginaALeer = malloc(sizeof(int));
 				recibirYDeserializarInt(paginaALeer, clienteMemoria);
 
 				char* contenidoPagina = malloc(tamanioPagina);
-				contenidoPagina = leerPagina(*paginaALeer);
+				contenidoPagina = leerPagina(*pid, *paginaALeer);
 
 				//Enviar contenidoPagina a Memoria
 				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
@@ -428,20 +431,43 @@ void escribirLeer(){
 
 }
 
-char* leerPagina(int numeroPagina){
+char* leerPagina(int pid, int numeroPagina){
 
-	int posicion = numeroPagina * tamanioPagina;
+	pagina_t* pagina = malloc(sizeof(pagina_t));
+	int numero = 0;
+	int paginaProceso = 0;
+
 	char* contenido = malloc(tamanioPagina);
 
-	fseek(archivoSwap, posicion, SEEK_SET);
+	while(pagina->proceso != pid){
+		numero++;
+		pagina = list_get(listaGestionEspacios, numero);
+	}
 
-	fgets(contenido, tamanioPagina, archivoSwap);
+	while(pagina->proceso == pid){
 
-	string_trim(&contenido);
+		if(paginaProceso == numeroPagina){
 
+			int posicion = pagina->numeroPagina * tamanioPagina;
+
+			fseek(archivoSwap, posicion, SEEK_SET);
+
+			fgets(contenido, tamanioPagina, archivoSwap);
+
+			string_trim(&contenido);
+
+			break;
+		}else{
+			paginaProceso++;
+			numero++;
+			pagina = list_get(listaGestionEspacios, numero);
+		}
+
+	}
 	return contenido;
 }
 
+//TODO Cambiar por algo parecido a leerPagina
 void escribirPagina(int paginaAEscribir, char* contenido){
 
 	int posicion = paginaAEscribir * tamanioPagina;
