@@ -30,7 +30,6 @@
 #include <commons/collections/list.h>
 #include "../../sockets.h"
 
-
 typedef enum {
 	INICIARPROCESO,
 	ENTRADASALIDA,
@@ -121,8 +120,7 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 	direccionServidor.sin_port = htons(puerto);
 
 	*s = socket(AF_INET, SOCK_STREAM, 0);
-	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))
-			== -1) {
+	if (connect(*s, (void*) &direccionServidor, sizeof(direccionServidor))	== -1) {
 		log_error(archivoLog, "No se pudo conectar");
 		return 0;
 	}
@@ -131,16 +129,16 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 }
 
 void iniciarmProc(int pID, char* parametro) {
-	int tamPaquete = sizeof(int)*3;
+	int tamPaquete = sizeof(int) * 3;
 	char* paquete = malloc(tamPaquete);
 	int cantPaginas = strtol(parametro, NULL, 10);
-	serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pID), cantPaginas);
+	serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pID),cantPaginas);
 	send(socketMemoria, paquete, tamPaquete, 0);
 	free(paquete);
 }
 
 void finalizarmProc(int pID) {
-	int tamPaquete = sizeof(int)*2;
+	int tamPaquete = sizeof(int) * 2;
 	char* paquete = malloc(tamPaquete);
 	serializarInt(serializarInt(paquete, FINALIZARPROCESO), pID);
 	send(socketMemoria, paquete, tamPaquete, 0);
@@ -149,7 +147,7 @@ void finalizarmProc(int pID) {
 }
 
 void leermProc(int pID, char* parametro) {
-	int tamPaquete = sizeof(int)*3;
+	int tamPaquete = sizeof(int) * 3;
 	char* paquete = malloc(tamPaquete);
 	int nroPagina = strtol(parametro, NULL, 10);
 	serializarInt(serializarInt(serializarInt(paquete, LEERMEMORIA), pID), nroPagina);
@@ -163,11 +161,8 @@ void ejecutarmProc() {
 	int programCounter;
 	int tamanioPaquete;
 	char* path;
-	char* comandoLeido = malloc(sizeof(char) * 14);
-	char* instruccion = malloc(sizeof(char) * 10);
-	char** leidoSplit = malloc(sizeof(char) * 2);
-	leidoSplit[0] = malloc(sizeof(char) * 10);
-	leidoSplit[1] = malloc(sizeof(char)*3);
+	char* comandoLeido = malloc(14); //a cambiar en posteriores checkpoints
+	char* instruccion;
 	char* resultadosTot = string_new();
 	char* paqueteRafaga;
 	recibirYDeserializarChar(&path, socketPlanificador);
@@ -177,7 +172,7 @@ void ejecutarmProc() {
 	mCod = fopen(path, "r");
 	fgets(comandoLeido, 14, mCod);
 
-	leidoSplit = string_split(comandoLeido, " ");
+	char** leidoSplit = string_split(comandoLeido, " ");
 	instruccion = leidoSplit[0];
 
 	while (!feof(mCod)) {
@@ -188,17 +183,18 @@ void ejecutarmProc() {
 			int verificador;
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
-				log_info(archivoLog, "Instruccion ejecutada:%s Proceso:%d iniciado",comandoLeido, pID);
-				char* aux = string_from_format("mProc %d - Iniciado",pID);
-				string_append(resultadosTot,aux);
-				 //verificar si esto es valido
-			}
-			else {
+				log_info(archivoLog,"Instruccion ejecutada:%s Proceso:%d iniciado",	comandoLeido, pID);
+				char* aux = string_from_format("mProc %d - Iniciado", pID);
+				string_append(&resultadosTot, aux);
+				free(aux);
+			} else {
 				log_info(archivoLog,"Instruccion ejecutada:%s Proceso:%d. FALLO!",comandoLeido, pID);
-				string_append_with_format(&resultadosTot, "mProc %d - Fallo",pID);
+				char* aux = string_from_format("mProc %d - Fallo", pID);
+				string_append(&resultadosTot, aux);
+				free(aux);
 			}
-
 		}
+
 		if (string_equals_ignore_case(instruccion, "leer")) {
 			leermProc(pID, leidoSplit[1]);
 			int verificador;
@@ -206,12 +202,13 @@ void ejecutarmProc() {
 			if (verificador != -1) {
 				char* resultado = malloc(sizeof(char) * 25);
 				recibirYDeserializarChar(&resultado, socketMemoria);
-				log_info(archivoLog, "Instruccion ejecutada:%s Proceso:%d. Resultado:%s",comandoLeido, pID, resultado);
-				string_append_with_format(&resultadosTot,"mProc %d - Pagina %s leida: %s", pID, leidoSplit[1],resultado);
+				log_info(archivoLog,"Instruccion ejecutada:%s Proceso:%d. Resultado:%s",comandoLeido, pID, resultado);
+				char* aux = string_from_format("mProc %d - Pagina %s leida: %s", pID, leidoSplit[1], resultado);
+				string_append(&resultadosTot, aux);
 				free(resultado);
-			}
-			else {
-				log_info(archivoLog, "Instruccion ejecutada: %s Proceso: %d Error de lectura", comandoLeido, pID);
+				free(aux);
+			} else {
+				log_info(archivoLog,"Instruccion ejecutada: %s Proceso: %d Error de lectura",comandoLeido, pID);
 			}
 		}
 		if (string_equals_ignore_case(instruccion, "escribir")) { //proximamente, solo en sisop
@@ -223,13 +220,13 @@ void ejecutarmProc() {
 		if (string_equals_ignore_case(instruccion, "finalizar")) {
 			finalizarmProc(pID);
 			int verificador;
-			 recibirYDeserializarInt(&verificador, socketMemoria);
-			if(verificador!=-1){
-				log_info(archivoLog, "Instruccio ejecutada:%s Proceso:%d finalizado", comandoLeido, pID);
-				string_append_with_format(&resultadosTot, "mProc %d finalizado",pID);
-			}
-			else{
-				log_info(archivoLog, "Instruccio ejecutada:%s Proceso:%d error al finalizar", comandoLeido, pID);
+			recibirYDeserializarInt(&verificador, socketMemoria);
+			if (verificador != -1) {
+				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d finalizado",comandoLeido, pID);
+				char* aux = string_from_format(&resultadosTot, "mProc %d finalizado",pID);
+				string_append(&resultadosTot, aux);
+			} else {
+				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d error al finalizar",comandoLeido, pID);
 			}
 		}
 
@@ -245,9 +242,9 @@ void ejecutarmProc() {
 	free(leidoSplit[1]);
 	free(leidoSplit);
 	fclose(mCod);
-	tamanioPaquete=strlen(resultadosTot)+1+sizeof(int);
-	paqueteRafaga=malloc(tamanioPaquete);
-	serializarChar(paqueteRafaga,resultadosTot);
+	tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int);
+	paqueteRafaga = malloc(tamanioPaquete);
+	serializarChar(paqueteRafaga, resultadosTot);
 	send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 	free(resultadosTot);
 	free(paqueteRafaga);

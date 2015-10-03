@@ -45,8 +45,17 @@ typedef struct {
 	int proceso;
 } pagina_t;
 
+//Operaciones
+typedef enum {
+	INICIARPROCESO,
+	ENTRADASALIDA,
+	INICIOMEMORIA,
+	LEERMEMORIA,
+	ESCRIBIRMEMORIA,
+	FINALIZARPROCESO
+} operacion_t;
 
-typedef enum {NUEVOPROCESO, LEER, ESCRIBIR, FINALIZAR} procedimiento_t;
+//typedef enum {NUEVOPROCESO, LEER, ESCRIBIR, FINALIZAR} procedimiento_t;
 
 t_log* archivoLog;
 char* ipAdmMemoria;
@@ -58,8 +67,6 @@ int listeningSocket;
 int tamanioPagina;
 unsigned retardoCompactacion; //son segundos sino lo cambio a int
 int clienteMemoria;
-
-int procedimiento;
 
 t_list* listaGestionEspacios;
 
@@ -141,6 +148,7 @@ int main(int argc, char** argv) {
 	pthread_join(admDeEspacio, NULL);
 	//pthread_join(escribirLeerPaginas, NULL);
 
+	list_destroy(listaGestionEspacios);
 	fclose(archivoSwap);
 
 	return 0;
@@ -193,15 +201,16 @@ void admDeEspacios(){
 
 	process_t* proceso = malloc(sizeof(process_t));
 	int paginaInicio = 0;
+	int operacion, tamanioPaquete;
 
 	log_info(archivoLog, "Comienza el hilo Administrador de Espacios.\n");
 
 	while(1){
 
-		recibirYDeserializarInt(&procedimiento, clienteMemoria);
+		recibirYDeserializarInt(&operacion, clienteMemoria);
 
-		switch(procedimiento){
-			case NUEVOPROCESO:{
+		switch(operacion){
+			case INICIARPROCESO:{
 
 				//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
@@ -209,42 +218,56 @@ void admDeEspacios(){
 
 				paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
 
+				tamanioPaquete = sizeof(int);
+				char* paquete = malloc(tamanioPaquete);
+
 				if(paginaInicio == -1){
 					//No hay espacio disponible
 					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
-					//TODO Enviar notificacion a Memoria
-					char* paquete = malloc(10);
+
+					serializarInt(paquete, -1);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 					free(paquete);
 				} else{
 					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
 					asignarEspacio(paginaInicio, proceso);
 					log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
-					//TODO Enviar un mensaje a memoria indicando que se pudo asignar
-					char* paquete = malloc(10);
+
+					serializarInt(paquete, 1);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 					free(paquete);
 				}
 				break;
 			}
 
-			case FINALIZAR:{
+			case FINALIZARPROCESO:{
 
 				//Recibe la peticion por parte de Memoria de eliminar un proceso
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 
+				tamanioPaquete = sizeof(int);
+				char* paquete = malloc(tamanioPaquete);
+
 				if(liberarMemoria(proceso->processID) == -1){
 					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
+
+					serializarInt(paquete, -1);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
+
+					free(paquete);
 				}else{
-					//TODO Enviar confirmacion
-					char* paquete = malloc(10);
+					//Enviar confirmacion
+					serializarInt(paquete, 1);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 					free(paquete);
 				}
 				break;
 			}
 
-			case LEER:{
+			case LEERMEMORIA:{
 
 				int* paginaALeer = malloc(sizeof(int));
 				recibirYDeserializarInt(paginaALeer, clienteMemoria);
@@ -253,13 +276,12 @@ void admDeEspacios(){
 				contenidoPagina = leerPagina(*paginaALeer);
 
 				//Enviar contenidoPagina a Memoria
-				int* tamanioPaquete = malloc(sizeof(int));
-				*tamanioPaquete = tamanioPagina + sizeof(int) * 2;
-				char* paquete = malloc(*tamanioPaquete);
+				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
+				char* paquete = malloc(tamanioPaquete);
 
-				serializarChar(serializarInt(serializarInt(paquete, procedimiento), strlen(contenidoPagina)), contenidoPagina);
+				serializarChar(serializarInt(paquete, operacion), contenidoPagina);
 
-				send(clienteMemoria, paquete, *tamanioPaquete, 0);
+				send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 				free(paginaALeer);
 				free(contenidoPagina);
@@ -268,7 +290,7 @@ void admDeEspacios(){
 				break;
 			}
 
-			case ESCRIBIR:{
+			case ESCRIBIRMEMORIA:{
 
 				int* paginaAEscribir = malloc(sizeof(int));
 				recibirYDeserializarInt(paginaAEscribir, clienteMemoria);
@@ -283,16 +305,15 @@ void admDeEspacios(){
 
 				free(paginaAEscribir);
 				//Enviar confirmacion y contenido a Memoria
-				int* tamanioPaquete = malloc(sizeof(int));
-				*tamanioPaquete = *tamanioContenido + sizeof(int) * 2;
-				char* paquete = malloc(*tamanioPaquete);
+				tamanioPaquete = *tamanioContenido + sizeof(int) * 2;
 
-				serializarChar(serializarInt(serializarInt(paquete, procedimiento), *tamanioContenido), contenido);
+				char* paquete = malloc(tamanioPaquete);
 
-				send(clienteMemoria, paquete, *tamanioPaquete, 0);
+				serializarChar(serializarInt(paquete, operacion), contenido);
+
+				send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 				free(paquete);
-				free(tamanioPaquete);
 				free(tamanioContenido);
 				free(contenido);
 
