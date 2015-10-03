@@ -46,15 +46,16 @@ typedef struct {
 } pagina_t;
 
 //Operaciones
+
 typedef enum {
-	INICIARPROCESO,
-	ENTRADASALIDA,
-	INICIOMEMORIA,
-	LEERMEMORIA,
-	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO,
-	RAFAGAPROCESO,
-	PROCESOBLOQUEADO
+	INICIARPROCESO = 0,
+	ENTRADASALIDA = 1,
+	INICIOMEMORIA = 2,
+	LEERMEMORIA = 3,
+	ESCRIBIRMEMORIA = 4,
+	FINALIZARPROCESO = 5,
+	RAFAGAPROCESO = 6,
+	PROCESOBLOQUEADO = 7
 } operacion_t;
 
 //typedef enum {NUEVOPROCESO, LEER, ESCRIBIR, FINALIZAR} procedimiento_t;
@@ -110,20 +111,21 @@ int main(int argc, char** argv) {
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
-	char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
+	/*char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
 
 	if(system(comando) == -1)
 		log_error(archivoLog, "No se pudo crear el archivo de Swap.\n");
 	else
 		log_info(archivoLog, "Se creó el archivo de Swap.\n");
-
+	*/
 	//Abro e inicializo el archivo con "\0"
-	archivoSwap = fopen(nombreSwap, "r+");
-
+	archivoSwap = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap), "r+");
+	log_info(archivoLog, string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap));
+	log_info(archivoLog, "Abrio el archivo. %d",archivoSwap);
 	while(!feof(archivoSwap)){
 		fputc('\0',archivoSwap);
 	}
-
+	log_info(archivoLog, "Abrio el archivo2.");
 	//Creo la lista para la gestion de los espacios vacios
 	listaGestionEspacios = list_create();
 	int i;

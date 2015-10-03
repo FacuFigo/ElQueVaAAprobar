@@ -36,14 +36,14 @@
 #define BACKLOG 5
 
 typedef enum {
-	INICIARPROCESO,
-	ENTRADASALIDA,
-	INICIOMEMORIA,
-	LEERMEMORIA,
-	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO,
-	RAFAGAPROCESO,
-	PROCESOBLOQUEADO
+	INICIARPROCESO = 0,
+	ENTRADASALIDA = 1,
+	INICIOMEMORIA = 2,
+	LEERMEMORIA = 3,
+	ESCRIBIRMEMORIA = 4,
+	FINALIZARPROCESO = 5,
+	RAFAGAPROCESO = 6,
+	PROCESOBLOQUEADO = 7
 } operacion_t;
 
 t_log* archivoLog;
@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
+	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPU);
 
 	//Meto la cpu que se conecta a la cola de libres
 	queue_push(queueCPULibre, &clienteCPU);
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
 	//Comienza el thread de control de tiempo
 	//pthread_t hiloControlTiempo;
 	//pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
-
+	log_info(archivoLog, algoritmo);
 	if(string_equals_ignore_case(algoritmo, "FIFO")){
 		//Comienza el thread del planificadorFIFO
 		pthread_t hiloPlanificadorFIFO;
@@ -177,8 +177,8 @@ void configurarPlanificador(char* config) {
 
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
 		puertoEscucha = config_get_int_value(configPlanificador, "PUERTO_ESCUCHA");
-	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICADOR"))
-		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICADOR"));
+	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICACION"))
+		algoritmo = string_duplicate(config_get_string_value(configPlanificador, "ALGORITMO_PLANIFICACION"));
 	if (config_has_property(configPlanificador, "QUANTUM"))
 		quantum = config_get_int_value(configPlanificador, "QUANTUM");
 
@@ -243,12 +243,7 @@ void manejoDeConsola() {
 				comandoCPU();
 		}
 
-		//Recibo notificacion del cpu para saber como termino la operacion
-		int* notificacion = malloc(sizeof(int));
-		recibirYDeserializarInt(notificacion, clienteCPU);
-		log_info(archivoLog, "%s", notificacion);
 		
-		free(notificacion);
 		free(comando.comando);
 		free(comando.parametro);
 	}
@@ -386,12 +381,12 @@ void planificadorFIFO() {
 
 	while(1){
 
-		if (! (queue_is_empty(queueCPULibre) && queue_is_empty(queueReady))){
+		if (! (queue_is_empty(queueCPULibre) || queue_is_empty(queueReady))){
 
-			pcb_t* auxPCB = malloc(sizeof(pcb_t));
+			// ASQUEROSO MEMORY LEAK
+			//pcb_t* auxPCB = malloc(sizeof(pcb_t));
 			pthread_mutex_lock(&mutexQueueReady);
-
-			auxPCB = queue_pop(queueReady);
+			pcb_t* auxPCB = queue_pop(queueReady);
 			log_info(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
 
 			pthread_mutex_unlock(&mutexQueueReady);

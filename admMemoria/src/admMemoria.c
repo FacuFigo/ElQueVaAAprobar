@@ -36,14 +36,14 @@
 t_log* archivoLog;
 
 typedef enum {
-	INICIARPROCESO,
-	ENTRADASALIDA,
-	INICIOMEMORIA,
-	LEERMEMORIA,
-	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO,
-	RAFAGAPROCESO,
-	PROCESOBLOQUEADO
+	INICIARPROCESO = 0,
+	ENTRADASALIDA = 1,
+	INICIOMEMORIA = 2,
+	LEERMEMORIA = 3,
+	ESCRIBIRMEMORIA = 4,
+	FINALIZARPROCESO = 5,
+	RAFAGAPROCESO = 6,
+	PROCESOBLOQUEADO = 7
 } operacion_t;
 
 int puertoEscucha;
@@ -83,12 +83,13 @@ int main(int argc, char** argv) {
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso CPU %.\n", clienteCPU);
+	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPU);
 
-	pthread_t admDeMemoria;
+	admDeMemoria();
+	/*pthread_t admDeMemoria;
 	pthread_create(&admDeMemoria, NULL, (void *)admDeMemoria, NULL);
 
-	pthread_join(admDeMemoria, NULL);
+	pthread_join(admDeMemoria, NULL);*/
 
 	return 0;
 }
