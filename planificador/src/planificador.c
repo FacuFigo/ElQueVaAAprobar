@@ -41,7 +41,9 @@ typedef enum {
 	INICIOMEMORIA,
 	LEERMEMORIA,
 	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO
+	FINALIZARPROCESO,
+	RAFAGAPROCESO,
+	PROCESOBLOQUEADO
 } operacion_t;
 
 t_log* archivoLog;
@@ -71,10 +73,6 @@ int pIDContador = 1;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
-typedef enum {RAFAGA, BLOQUEAR} formaFinalizacion_t;
-typedef enum {FINALIZOPROCESO} procedimiento_t;
-//typedef enum {RAFAGA, QUANTUM, BLOQUEADO} estadoCPU_t; //el cpu avisa si termino la rafaga (FIFO) o quantum(RR)
-
 
 typedef struct {
 	char* comando;
@@ -435,12 +433,12 @@ void planificadorFIFO() {
 			int* procedimiento = malloc(sizeof(int));
 			recibirYDeserializarInt(procedimiento, clienteCPU);
 
-			if(procedimiento == FINALIZOPROCESO){
+			if(*procedimiento == FINALIZARPROCESO){
 				int* formaFinalizacion = malloc(sizeof(int));
 				recibirYDeserializarInt(formaFinalizacion, clienteCPU);
 
 				switch(*formaFinalizacion){
-					case RAFAGA:
+					case RAFAGAPROCESO:
 						finalizarRafaga(auxPCB, queueReady);
 
 						log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
@@ -451,7 +449,7 @@ void planificadorFIFO() {
 						free(resultadoTotal);
 
 						break;
-					case BLOQUEAR:
+					case PROCESOBLOQUEADO:
 						finalizarRafaga(auxPCB, queueBlocked);
 						log_info(archivoLog, "Se bloquea el proceso %i.\n", auxPCB->processID);
 						break;

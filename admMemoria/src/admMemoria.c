@@ -41,7 +41,9 @@ typedef enum {
 	INICIOMEMORIA,
 	LEERMEMORIA,
 	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO
+	FINALIZARPROCESO,
+	RAFAGAPROCESO,
+	PROCESOBLOQUEADO
 } operacion_t;
 
 int puertoEscucha;
@@ -91,7 +93,7 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
-void configurarAdmMemoria(char* config) {operacion_t
+void configurarAdmMemoria(char* config) {
 
 	t_config* configurarAdmMemoria = config_create(config);
 	if (config_has_property(configurarAdmMemoria, "PUERTO_ESCUCHA"))
