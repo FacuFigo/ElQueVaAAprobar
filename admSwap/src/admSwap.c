@@ -111,13 +111,13 @@ int main(int argc, char** argv) {
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
-	/*char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
+	char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
 
 	if(system(comando) == -1)
 		log_error(archivoLog, "No se pudo crear el archivo de Swap.\n");
 	else
 		log_info(archivoLog, "Se creó el archivo de Swap.\n");
-	*/
+
 	//Abro e inicializo el archivo con "\0"
 	archivoSwap = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap), "r+");
 	log_info(archivoLog, string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap));
@@ -219,9 +219,10 @@ void admDeEspacios(){
 				//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 				recibirYDeserializarInt(&proceso->cantidadDePaginas, clienteMemoria);
-
+				log_info(archivoLog, "Recibi pid %i.\n", proceso->processID);
+				log_info(archivoLog, "Recibi cantidad de paginas %i.\n", proceso->cantidadDePaginas);
 				paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
-
+				log_info(archivoLog, "Pagina de inicio %i.\n", paginaInicio);
 				tamanioPaquete = sizeof(int);
 				char* paquete = malloc(tamanioPaquete);
 

@@ -173,15 +173,16 @@ void admDeMemoria(){
 
 			recibirYDeserializarInt(&pid, clienteCPU);
 			recibirYDeserializarInt(&cantPaginas, clienteCPU);
-
+			log_info(archivoLog, "Recibi pid %i.\n", pid);
+			log_info(archivoLog, "Recibi cantidad de paginas %i.\n", cantPaginas);
 			tamanioPaquete = sizeof(int) * 3;
 			paquete = malloc(tamanioPaquete);
 
 			//Le pido a Swap que inicialice un proceso:
 			serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pid), cantPaginas);
-
+			log_info(archivoLog, "Antes del send de paquete.\n");
 			send(socketSwap, paquete, tamanioPaquete, 0);
-
+			log_info(archivoLog, "Despues del send de paquete.\n");
 			free(paquete);//Se puede sacar este free?
 
 			//Recibo respuesta de Swap:

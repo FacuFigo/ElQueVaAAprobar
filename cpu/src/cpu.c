@@ -134,8 +134,11 @@ void iniciarmProc(int pID, char* parametro) {
 	int tamPaquete = sizeof(int) * 3;
 	char* paquete = malloc(tamPaquete);
 	int cantPaginas = strtol(parametro, NULL, 10);
+	log_info(archivoLog, "Cantidad de paginas: %i.\n", cantPaginas);
 	serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pID),cantPaginas);
+	log_info(archivoLog, "Paquete: %s.\n", paquete);
 	send(socketMemoria, paquete, tamPaquete, 0);
+	log_info(archivoLog, "mande el paquete\n");
 	free(paquete);
 }
 
@@ -168,18 +171,23 @@ void ejecutarmProc() {
 	char* resultadosTot = string_new();
 	char* paqueteRafaga;
 	recibirYDeserializarInt(&pID, socketPlanificador);
+	log_info(archivoLog, "Recibi pid %i.\n", pID);
 	recibirYDeserializarInt(&programCounter, socketPlanificador);
+	log_info(archivoLog, "Recibi program counter %i.\n", programCounter);
 	recibirYDeserializarChar(&path, socketPlanificador);
+	log_info(archivoLog, "Recibi path %s.\n", path);
 
-	mCod = fopen(path, "r");
+	mCod = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/cpu/Debug/%s",path), "r");
+	log_info(archivoLog, "Conectado a la Memoria %i.\n", mCod);
 	fgets(comandoLeido, 14, mCod);
 
-	char** leidoSplit = string_split(comandoLeido, " ");
-	instruccion = leidoSplit[0];
-
+	//char** leidoSplit = string_split(comandoLeido, " ");
+	//instruccion = leidoSplit[0];
+	//log_info(archivoLog, "Conectado a la Memoria %s.\n", instruccion);
 	while (!feof(mCod)) {
 		programCounter++;
-
+		char** leidoSplit = string_split(comandoLeido, " ");
+		instruccion = leidoSplit[0];
 		if (string_equals_ignore_case(instruccion, "iniciar")) {
 			iniciarmProc(pID, leidoSplit[1]);
 			int verificador;
@@ -239,10 +247,7 @@ void ejecutarmProc() {
 
 	log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 	free(comandoLeido);
-	free(instruccion);
-	free(leidoSplit[0]);
-	free(leidoSplit[1]);
-	free(leidoSplit);
+	//free(leidoSplit);
 	fclose(mCod);
 	tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 	paqueteRafaga = malloc(tamanioPaquete);

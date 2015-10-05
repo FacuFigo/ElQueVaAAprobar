@@ -418,8 +418,7 @@ void planificadorFIFO() {
 			tamanioPaquete = sizeof(int) * 3 + strlen(auxPCB->path) + 1;
 			char* paquete = malloc(tamanioPaquete);
 
-			serializarChar(serializarInt(serializarInt(serializarInt(serializarInt(paquete, 1), auxPCB->processID), auxPCB->programCounter), strlen(auxPCB->path)),
-							auxPCB->path);
+			serializarChar(serializarInt(serializarInt(paquete, auxPCB->processID), auxPCB->programCounter),auxPCB->path);
 
 			send(clienteCPU, paquete, tamanioPaquete, 0);
 
