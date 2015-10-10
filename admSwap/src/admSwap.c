@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
-	char* comando = string_from_format("sudo dd if=/dev/sda1 of=%s bs=%i count=%i", nombreSwap, tamanioArchivoSwap, tamanioArchivoSwap);
+	char* comando = string_from_format("sudo dd if=/dev/zero of=%s bs=%i count=1", nombreSwap, tamanioArchivoSwap);
 
 	if(system(comando) == -1)
 		log_error(archivoLog, "No se pudo crear el archivo de Swap.\n");
@@ -122,9 +122,9 @@ int main(int argc, char** argv) {
 	archivoSwap = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap), "r+");
 	log_info(archivoLog, string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap));
 	log_info(archivoLog, "Abrio el archivo. %d",archivoSwap);
-	while(!feof(archivoSwap)){
-		fputc('\0',archivoSwap);
-	}
+	//while(!feof(archivoSwap)){
+	//	fputc('\0',archivoSwap);
+	//}
 	log_info(archivoLog, "Abrio el archivo2.");
 	//Creo la lista para la gestion de los espacios vacios
 	listaGestionEspacios = list_create();
@@ -212,7 +212,7 @@ void admDeEspacios(){
 	while(1){
 
 		recibirYDeserializarInt(&operacion, clienteMemoria);
-
+		log_info(archivoLog, "Recibi Operacion");
 		switch(operacion){
 			case INICIARPROCESO:{
 
@@ -244,6 +244,7 @@ void admDeEspacios(){
 
 					free(paquete);
 				}
+				log_info(archivoLog, "Termino inicializar");
 				break;
 			}
 
@@ -282,7 +283,7 @@ void admDeEspacios(){
 
 				char* contenidoPagina = malloc(tamanioPagina);
 				contenidoPagina = leerPagina(*pid, *paginaALeer);
-
+				log_info(archivoLog, "Termino de leer pagina %d",*paginaALeer);
 				//Enviar contenidoPagina a Memoria
 				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
 				char* paquete = malloc(tamanioPaquete);
@@ -340,7 +341,7 @@ int buscarEspacioDisponible(int paginasNecesarias){
 	int paginasEncontradas = 0;
 	int numeroPagina = 0;
 	int encontrado = 0;
-	pagina_t* pagina = malloc(sizeof(pagina_t));
+	pagina_t* pagina;
 
 	pagina = list_get(listaGestionEspacios, numeroPagina);
 	paginaInicio = pagina->numeroPagina;
@@ -366,7 +367,6 @@ int buscarEspacioDisponible(int paginasNecesarias){
 	if(!encontrado)
 		return -1;
 
-	free(pagina);
 	return paginaInicio;
 }
 
@@ -374,8 +374,7 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 
 	int i;
 	int paginaALeer;
-	pagina_t* pagina = malloc(sizeof(pagina_t));
-
+	pagina_t* pagina;
 	pagina = list_get(listaGestionEspacios, paginaInicio);
 	paginaALeer = pagina->numeroPagina;
 
@@ -389,7 +388,6 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 
 	}
 
-	free(pagina);
 }
 
 //Libera la parte de memoria ocupada por el proceso
@@ -436,7 +434,7 @@ void escribirLeer(){
 
 char* leerPagina(int pid, int numeroPagina){
 
-	pagina_t* pagina = malloc(sizeof(pagina_t));
+	pagina_t* pagina;
 	int numero = 0;
 	int paginaProceso = 0;
 
@@ -457,7 +455,7 @@ char* leerPagina(int pid, int numeroPagina){
 
 			fgets(contenido, tamanioPagina, archivoSwap);
 
-			string_trim(&contenido);
+			//string_trim(&contenido);
 
 			break;
 		}else{

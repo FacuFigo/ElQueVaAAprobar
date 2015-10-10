@@ -179,7 +179,7 @@ void admDeMemoria(){
 			paquete = malloc(tamanioPaquete);
 
 			//Le pido a Swap que inicialice un proceso:
-			serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pid), cantPaginas);
+			serializarInt(serializarInt(serializarInt(paquete, INICIARPROCESO), pid), cantPaginas);
 			log_info(archivoLog, "Antes del send de paquete.\n");
 			send(socketSwap, paquete, tamanioPaquete, 0);
 			log_info(archivoLog, "Despues del send de paquete.\n");
@@ -199,7 +199,7 @@ void admDeMemoria(){
 			send(clienteCPU, paquete, sizeof(int),0);
 
 			free(paquete);
-
+			log_info(archivoLog, "Termino inicializar");
 			break;
 		}
 		case LEERMEMORIA:{
@@ -223,7 +223,7 @@ void admDeMemoria(){
 			if (verificador != -1){
 				recibirYDeserializarChar(&respuesta,socketSwap);
 				log_info(archivoLog, "Página %d leida: %s",pagina,respuesta);
-				tamanioPaquete = sizeof(int)+strlen(respuesta)+1;
+				tamanioPaquete = sizeof(int)*2+strlen(respuesta)+1;
 				paquete = malloc(tamanioPaquete);//realloc?
 				serializarChar(serializarInt(paquete, verificador),respuesta);
 				free(respuesta);
