@@ -61,6 +61,8 @@ typedef enum {
 //typedef enum {NUEVOPROCESO, LEER, ESCRIBIR, FINALIZAR} procedimiento_t;
 
 t_log* archivoLog;
+t_log* logDebug;
+
 char* ipAdmMemoria;
 char* puertoAdmMemoria;
 int puertoEscucha;
@@ -94,9 +96,11 @@ void escribirPagina(int paginaAEscribir, char* contenido);
 
 int main(int argc, char** argv) {
 
-	//Creo el archivo de logs
-	archivoLog = log_create("log_SWAP", "SWAP", 1, 0);
+	//Creo los archivos de logs
+	archivoLog = log_create("log_SWAP", "SWAP", 1, LOG_LEVEL_INFO);
 	log_info(archivoLog, "Archivo de logs creado.\n");
+
+	logDebug = log_create("log_Debug_Swap", "SWAP", 0, LOG_LEVEL_DEBUG);
 
 	configurarAdmSwap(argv[1]);
 
@@ -111,23 +115,38 @@ int main(int argc, char** argv) {
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
-	char* comando = string_from_format("sudo dd if=/dev/zero of=%s bs=%i count=1", nombreSwap, tamanioArchivoSwap);
+	char* dd = string_from_format("echo utnso | sudo -S dd if=/dev/zero of=%s bs=%i count=1", nombreSwap, tamanioArchivoSwap);
 
-	if(system(comando) == -1)
-		log_error(archivoLog, "No se pudo crear el archivo de Swap.\n");
-	else
-		log_info(archivoLog, "Se creó el archivo de Swap.\n");
+	if(system(dd) == -1){
+		log_error(logDebug, "No se pudo crear el archivo de Swap.\n");
+		return -1;
+	}
 
-	//Abro e inicializo el archivo con "\0"
-	archivoSwap = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap), "r+");
-	log_info(archivoLog, string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/admSwap/Debug/%s", nombreSwap));
-	log_info(archivoLog, "Abrio el archivo. %d",archivoSwap);
-	//while(!feof(archivoSwap)){
-	//	fputc('\0',archivoSwap);
-	//}
-	log_info(archivoLog, "Abrio el archivo2.");
+	log_debug(logDebug, "Se creó el archivo de Swap.\n");
+
+	char* chmod = string_from_format("sudo chmod 666 %s", nombreSwap);
+	if(system(chmod) == -1){
+		log_error(logDebug, "Fallo al darle permisos al archivo.");
+		return -1;
+	}
+
+	archivoSwap = fopen(nombreSwap, "r+");
+
+	if(archivoSwap)
+		log_info(archivoLog, "Abrio el archivo. %d", archivoSwap);
+	else{
+		log_debug(logDebug, "No se pudo abrir el archivo.");
+		return -1;
+	}
+
+/*	while(!feof(archivoSwap)){
+		fputc('\0',archivoSwap);
+	}
+*/
 	//Creo la lista para la gestion de los espacios vacios
 	listaGestionEspacios = list_create();
+	log_debug(logDebug, "Se crea la lista para gestion de espacios.");
+
 	int i;
 	for(i = 0; i < cantidadPaginas; i++){
 		pagina_t* pagina = malloc(sizeof(pagina_t));
@@ -145,10 +164,10 @@ int main(int argc, char** argv) {
 	pthread_t admDeEspacio;
 	pthread_create(&admDeEspacio, NULL, (void *) admDeEspacios, NULL);
 
-	//Thread que busca las paginas solicitadas por memoria
-	//pthread_t escribirLeerPaginas;
-	//pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
-
+/*	TODO Thread que busca las paginas solicitadas por memoria
+	pthread_t escribirLeerPaginas;
+	pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
+*/
 	pthread_join(admDeEspacio, NULL);
 	//pthread_join(escribirLeerPaginas, NULL);
 
@@ -203,7 +222,7 @@ int configurarSocketServidor() {
 
 void admDeEspacios(){
 
-	process_t* proceso = malloc(sizeof(process_t));
+	process_t proceso;
 	int paginaInicio = 0;
 	int operacion, tamanioPaquete;
 
@@ -217,18 +236,22 @@ void admDeEspacios(){
 			case INICIARPROCESO:{
 
 				//Recibir proceso de Memoria - PID, CANTIDAD DE PAGINAS A OCUPAR -
-				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
-				recibirYDeserializarInt(&proceso->cantidadDePaginas, clienteMemoria);
-				log_info(archivoLog, "Recibi pid %i.\n", proceso->processID);
-				log_info(archivoLog, "Recibi cantidad de paginas %i.\n", proceso->cantidadDePaginas);
-				paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
+				recibirYDeserializarInt(&proceso.processID, clienteMemoria);
+				recibirYDeserializarInt(&proceso.cantidadDePaginas, clienteMemoria);
+
+				log_info(archivoLog, "Recibi pid %i.\n", proceso.processID);
+				log_info(archivoLog, "Recibi cantidad de paginas %i.\n", proceso.cantidadDePaginas);
+
+				paginaInicio = buscarEspacioDisponible(proceso.cantidadDePaginas);
+
 				log_info(archivoLog, "Pagina de inicio %i.\n", paginaInicio);
+
 				tamanioPaquete = sizeof(int);
 				char* paquete = malloc(tamanioPaquete);
 
 				if(paginaInicio == -1){
 					//No hay espacio disponible
-					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
+					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso.processID);
 
 					serializarInt(paquete, -1);
 					send(clienteMemoria, paquete, tamanioPaquete, 0);
@@ -236,8 +259,8 @@ void admDeEspacios(){
 					free(paquete);
 				} else{
 					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
-					asignarEspacio(paginaInicio, proceso);
-					log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
+					asignarEspacio(paginaInicio, &proceso);
+					log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso.processID);
 
 					serializarInt(paquete, 1);
 					send(clienteMemoria, paquete, tamanioPaquete, 0);
@@ -251,13 +274,13 @@ void admDeEspacios(){
 			case FINALIZARPROCESO:{
 
 				//Recibe la peticion por parte de Memoria de eliminar un proceso
-				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
+				recibirYDeserializarInt(&proceso.processID, clienteMemoria);
 
 				tamanioPaquete = sizeof(int);
 				char* paquete = malloc(tamanioPaquete);
 
-				if(liberarMemoria(proceso->processID) == -1){
-					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", &proceso->processID);
+				if(liberarMemoria(proceso.processID) == -1){
+					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", proceso.processID);
 
 					serializarInt(paquete, -1);
 					send(clienteMemoria, paquete, tamanioPaquete, 0);
@@ -330,8 +353,6 @@ void admDeEspacios(){
 			}
 		}
 	}
-
-	free(proceso);
 }
 
 //Si encontro el espacio, devuelve el byte en donde comienza el espacio, sino devuelve -1
