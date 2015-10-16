@@ -51,7 +51,8 @@ int retardo;
 int socketPlanificador;
 int socketMemoria;
 int programCounter;
-pthread_t hilo1;
+pthread_t hilos[cantidadHilos];
+int threadCounter;
 
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
@@ -84,10 +85,14 @@ int main(int argc, char** argv) {
 	else
 		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
-	// Por ahora pruebo con un solo hilo para el Checkpoint
+	// Empiezo a probar con multihilos
 
-	pthread_create(&hilo1, NULL, (void *) ejecutarmProc, NULL);
-	pthread_join(hilo1, NULL);
+	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
+		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
+		int thread_id= process_get_thread_id();
+		log_info(archivoLog, "Instancia de CPU %d creada", thread_id);
+		pthread_join(hilos[threadCounter], NULL);
+	}
 
 	return 0;
 
@@ -168,6 +173,13 @@ void escribirmProc(int pID, int nroPagina, char* texto){
 
 }
 
+void entradaSalidamProc(int pID, int tiempo){
+	int tamPaquete= sizeof(int)*3;
+	char* paquete= malloc(tamPaquete);
+	serializarInt(serializarInt(serializarInt(paquete, ENTRADASALIDA), pID), tiempo);
+	send(socketPlanificador, paquete, tamPaquete, 0);
+	free(paquete);
+}
 
 
 void ejecutarmProc() {
@@ -207,13 +219,13 @@ void ejecutarmProc() {
 			int verificador;
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
-				log_info(archivoLog,"Instruccion ejecutada:iniciar %i Proceso:%d iniciado",	cantPaginas, pID);
+				log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d iniciado",	cantPaginas, pID);
 				char* aux = string_from_format("mProc %d - Iniciado", pID);
 				string_append(&resultadosTot, aux);
 				free(aux);
 			}
 			else {
-				log_info(archivoLog,"Instruccion ejecutada:iniciar %i Proceso:%d. FALLO!",cantPaginas, pID);
+				log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d. FALLO!",cantPaginas, pID);
 				char* aux = string_from_format("mProc %d - Fallo", pID);
 				string_append(&resultadosTot, aux);
 				free(aux);
@@ -228,44 +240,52 @@ void ejecutarmProc() {
 			if (verificador != -1) {
 				char* resultado = malloc(sizeof(char) * 25);
 				recibirYDeserializarChar(&resultado, socketMemoria);
-				log_info(archivoLog,"Instruccion ejecutada:leer %i Proceso:%d. Resultado:%s",nroPagina, pID, resultado);
-				char* aux = string_from_format("mProc %d - Pagina %i leida: %s", pID, nroPagina, resultado);
+				log_info(archivoLog,"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",nroPagina, pID, resultado);
+				char* aux = string_from_format("mProc %d - Pagina %d leida: %s", pID, nroPagina, resultado);
 				string_append(&resultadosTot, aux);
 				free(resultado);
 				free(aux);
 			} else {
-				log_info(archivoLog,"Instruccion ejecutada: leer %i  Proceso: %d - Error de lectura",nroPagina, pID);
+				log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
 			}
 		}
 		if (string_equals_ignore_case(instruccion, "escribir")) {
 			int nroPagina=strtol(leidoSplit[1], NULL, 10);
-			escribirmProc(pID, nroPagina, leidoSplit[2]);  //habria que sacar el fucking ; que queda pegado en leidoSplit[2]
+			char* texto=malloc(30);
+			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
+			escribirmProc(pID, nroPagina, texto);
 			int verificador;
 			recibirYDeserializarInt(&verificador,socketMemoria);
 			if (verificador!= -1){
-				log_info(archivoLog, "Instruccion ejecutada: escribir %i %s Proceso: %d Resultado: %s", nroPagina,leidoSplit[2], pID, leidoSplit[2]);
-				char* aux= string_from_format("mProc %d - Pagina %i escrita:%s",pID, nroPagina, leidoSplit[2]);
+				log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s", nroPagina,texto, pID, texto);
+				char* aux= string_from_format("mProc %d - Pagina %d escrita:%s",pID, nroPagina, texto);
 				string_append(&resultadosTot, aux);
 				free(aux);
 			}
 			else{
-				log_info(archivoLog, "Instruccion ejecutada: escribir %i %s Proceso: %d - Error de escritura", nroPagina, leidoSplit[2], pID);
+				log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
 			}
 
 		}
-		if (string_equals_ignore_case(instruccion, "entrada-salida")) { //proximamente, solo en sisop
-			entradaSalidamProc();
+		if (string_equals_ignore_case(instruccion, "entrada-salida")) {
+			int tiempo= strtol(leidoSplit[1], NULL, 10);
+			entradaSalidamProc(pID, tiempo);
+			log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempo, pID);
+			char* aux=string_fom_format("mProc %d en entrada-salida de tiempo %d", pID, tiempo);
+			string_append(&resultadosTot, aux);
+			free(aux);
+
 		}
 		if (string_equals_ignore_case(instruccion, "finalizar")) {
 			finalizarmProc(pID);
 			int verificador;
 			recibirYDeserializarInt(&verificador, socketMemoria);
 			if (verificador != -1) {
-				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d finalizado",comandoLeido, pID);
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
 				char* aux = string_from_format("mProc %d finalizado",pID);
 				string_append(&resultadosTot, aux);
 			} else {
-				log_info(archivoLog,"Instruccio ejecutada:%s Proceso:%d error al finalizar",comandoLeido, pID);
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
 			}
 		}
 
@@ -289,6 +309,20 @@ void ejecutarmProc() {
 
 
 
-void entradaSalidamProc() {
+corregirTexto(char* textoOriginal,char* textoCorregido){
+	int i=1;
+	int t=0;
+
+	while(textoOriginal[i]!= '"'){
+		textoCorregido[t]= textoOriginal[i];
+		i++;
+		t++;
+
+	}
 
 }
+
+
+
+
+
