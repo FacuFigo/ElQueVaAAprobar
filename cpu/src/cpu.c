@@ -51,7 +51,6 @@ int retardo;
 int socketPlanificador;
 int socketMemoria;
 int programCounter;
-pthread_t hilos[cantidadHilos];
 int threadCounter;
 
 void configurarCPU(char* config);
@@ -87,12 +86,15 @@ int main(int argc, char** argv) {
 
 	// Empiezo a probar con multihilos
 
+	pthread_t hilos[cantidadHilos];
+
 	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
 		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
-		int thread_id= process_get_thread_id();
-		log_info(archivoLog, "Instancia de CPU %d creada", thread_id);
-		pthread_join(hilos[threadCounter], NULL);
+//		int thread_id= process_get_thread_id();
+		log_info(archivoLog, "Instancia de CPU %d creada", threadCounter);
 	}
+
+	//se saco el join --> buscar un super join
 
 	return 0;
 
@@ -252,7 +254,7 @@ void ejecutarmProc() {
 		if (string_equals_ignore_case(instruccion, "escribir")) {
 			int nroPagina=strtol(leidoSplit[1], NULL, 10);
 			char* texto=malloc(30);
-			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
+//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
 			escribirmProc(pID, nroPagina, texto);
 			int verificador;
 			recibirYDeserializarInt(&verificador,socketMemoria);
@@ -271,7 +273,7 @@ void ejecutarmProc() {
 			int tiempo= strtol(leidoSplit[1], NULL, 10);
 			entradaSalidamProc(pID, tiempo);
 			log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempo, pID);
-			char* aux=string_fom_format("mProc %d en entrada-salida de tiempo %d", pID, tiempo);
+			char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempo);
 			string_append(&resultadosTot, aux);
 			free(aux);
 
@@ -309,7 +311,7 @@ void ejecutarmProc() {
 
 
 
-corregirTexto(char* textoOriginal,char* textoCorregido){
+/*corregirTexto(char* textoOriginal,char* textoCorregido){
 	int i=1;
 	int t=0;
 
@@ -320,7 +322,7 @@ corregirTexto(char* textoOriginal,char* textoCorregido){
 
 	}
 
-}
+}*/
 
 
 
