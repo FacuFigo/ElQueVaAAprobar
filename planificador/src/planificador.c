@@ -79,17 +79,17 @@ typedef struct {
 	char* parametro;
 } comando_t;
 
-typedef struct _t_Package {
-	char* message;
-	uint32_t message_long;
-} t_Package;
-
 typedef struct {
 	int processID;
 	estados_t estadoProceso;
 	int programCounter;
 	char* path;
 } pcb_t;
+
+typedef struct {
+	pcb_t* pcb;
+	int tiempoDormido;
+} param_t;
 
 //Funciones de configuracion
 void configurarPlanificador(char* config);
@@ -144,16 +144,18 @@ int main(int argc, char** argv) {
 	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPU);
 
 	//Meto la cpu que se conecta a la cola de libres
-	queue_push(queueCPULibre, &clienteCPU);
+	int* cantCPU = malloc(sizeof(int));
+	recibirYDeserializarInt(cantCPU, clienteCPU);
+	int i;
+	for(i = 0; i <= *cantCPU; i++){
+		queue_push(queueCPULibre, &clienteCPU);
+	}
+	free(cantCPU);
 
-//TODO Hilos Control de tiempo e Hilo multiplexor
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
-	//Comienza el thread de control de tiempo
-	//pthread_t hiloControlTiempo;
-	//pthread_create(&hiloControlTiempo, NULL, (void *) controlTiempo, NULL);
 	log_info(archivoLog, algoritmo);
 	if(string_equals_ignore_case(algoritmo, "FIFO")){
 		//Comienza el thread del planificadorFIFO
@@ -430,9 +432,10 @@ void planificadorFIFO() {
 			if(*procedimiento == FINALIZARPROCESO){
 				int* formaFinalizacion = malloc(sizeof(int));
 				recibirYDeserializarInt(formaFinalizacion, clienteCPU);
-
+//TODO Recibir el pID que finalizo - Puede haber distintos -
+//Crear un hilo nuevo por proceso que se crea para mantener las comunicaciones con cpu?
 				switch(*formaFinalizacion){
-					case RAFAGAPROCESO:
+					case RAFAGAPROCESO:{
 						finalizarRafaga(auxPCB, queueReady);
 
 						log_info(archivoLog, "Se acabo la rafaga de %i.\n", auxPCB->processID);
@@ -443,10 +446,23 @@ void planificadorFIFO() {
 						free(resultadoTotal);
 
 						break;
-					case PROCESOBLOQUEADO:
+					}
+					case PROCESOBLOQUEADO:{
+						int* tiempoBloqueado = malloc(sizeof(int));
+						recibirYDeserializarInt(tiempoBloqueado, clienteCPU);
+
 						finalizarRafaga(auxPCB, queueBlocked);
+						param_t parametro;
+						parametro.pcb = auxPCB;
+						parametro.tiempoDormido = *tiempoBloqueado;
+
+						pthread_t entradaSalida;
+						pthread_create(&entradaSalida, NULL, (void *) entradaSalida, &parametro);
 						log_info(archivoLog, "Se bloquea el proceso %i.\n", auxPCB->processID);
+
+						free(tiempoBloqueado);
 						break;
+					}
 				}
 				free(formaFinalizacion);
 			} else {
@@ -467,7 +483,7 @@ void planificadorFIFO() {
 	free(auxCPU);
 }
 
-//Al finalizar la rafaga de ejecucion se pone en la colaDestino dependiendo del estado del proceso en ese momento
+//TODO Al finalizar la rafaga de ejecucion se pone en la colaDestino dependiendo del estado del proceso en ese momento
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 
 	pcb_t* aux = malloc(sizeof(pcb_t));
@@ -513,5 +529,10 @@ void planificadorRR() {
 }
 
 void controlarTiempoBlock(){
+
+}
+
+//Al ser un KLT usar sleep y se clava solo el hilo
+void entradaSalida(int pid){
 
 }
