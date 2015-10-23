@@ -43,7 +43,8 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7
+	PROCESOBLOQUEADO = 7,
+	FINALIZAPROCESO = 8
 } operacion_t;
 
 t_log* archivoLog;
@@ -423,7 +424,9 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID){
 
-			queue_push(colaDestino, pcb);
+			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
+			if(colaDestino != NULL)
+				queue_push(colaDestino, pcb);
 
 			break;
 		} else {
@@ -480,9 +483,16 @@ void procesoCorriendo(procesoCorriendo_t proceso){
 
 	free(paquete);
 
+	int* proceso = malloc(sizeof(int));
 	int* procedimiento = malloc(sizeof(int));
-	recibirYDeserializarInt(procedimiento, clienteCPU);
-
+	
+	while(proceso != pcb->processID){
+		recibirYDeserializarInt(procedimiento, clienteCPU);
+	
+		recibirYDeserializarInt(proceso, clienteCPU);
+	}
+	free(proceso);
+	
 	if(*procedimiento == FINALIZARPROCESO){
 		int* formaFinalizacion = malloc(sizeof(int));
 		recibirYDeserializarInt(formaFinalizacion, clienteCPU);
@@ -497,14 +507,8 @@ void procesoCorriendo(procesoCorriendo_t proceso){
 
 			log_info(archivoLog, "Se acabo la rafaga de %i.\n", pcb->processID);
 
-			recibirYDeserializarInt(&tamanioPaquete, clienteCPU);
-			//TODO Loggear el resultado final en un archivo de logs, cambiar el otro archivo por un debugger
-			char* resultadoTotal = malloc(tamanioPaquete);
-			log_info(archivoLog, resultadoTotal);
-			free(resultadoTotal);
-
 			break;
-			}
+		}
 		case PROCESOBLOQUEADO:{
 			int* tiempoBloqueado = malloc(sizeof(int));
 			recibirYDeserializarInt(tiempoBloqueado, clienteCPU);
@@ -517,7 +521,20 @@ void procesoCorriendo(procesoCorriendo_t proceso){
 
 			free(tiempoBloqueado);
 			break;
-			}
+		}
+		
+		case FINALIZAPROCESO:{
+			pthread_mutex_lock(&mutexQueueReady);
+			finalizarRafaga(pcb, NULL);
+			pthread_mutex_unlock(&mutexQueueReady);
+
+			log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
+
+			recibirYDeserializarInt(&tamanioPaquete, clienteCPU);
+			//TODO Loggear el resultado final en un archivo de logs, cambiar el otro archivo por un debugger
+			char* resultadoTotal = malloc(tamanioPaquete);
+			log_info(archivoLog, resultadoTotal);
+			free(resultadoTotal);
 		}
 		free(formaFinalizacion);
 
