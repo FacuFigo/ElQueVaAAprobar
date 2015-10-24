@@ -237,7 +237,7 @@ void manejoDeConsola() {
 		comando.parametro = malloc(50);
 		
 //TODO Cambiar scanf() por fgets()
-		scanf("%s %s", comando.comando, comando.parametro);
+		fgets("%s %s", comando.comando, comando.parametro);
 		getchar();
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
@@ -372,7 +372,8 @@ void comandoCPU(){
 
 void planificadorFIFO() {
 
-	log_info(archivoLog, "Empieza el thread planificador.\n");
+	log_info(archivoLog, "Empieza el thread planificadorFIFO.\n");
+	log_debug(archivoLog, "Empieza el thread planificadorFIFO.\n");
 
 	int* cpu = malloc(sizeof(int));
 
@@ -387,6 +388,7 @@ void planificadorFIFO() {
 			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_info(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
+			log_debug(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
 
 			pthread_mutex_lock(&mutexQueueCPULibre);
 			cpu = queue_pop(queueCPULibre);
@@ -407,6 +409,7 @@ void planificadorFIFO() {
 			proceso->cpu = *cpu;
 
 			log_info(archivoLog, "Empieza la ejecución de proceso:%i", auxPCB->processID);
+			log_debug(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
 
 			//Comienza un thread para mantener el proceso corriendo y seguirlo
 			pthread_t threadProceso;
@@ -456,6 +459,49 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
 void planificadorRR() {
 
+	log_info(archivoLog, "Empieza el thread planificadorFIFO.\n");
+		log_debug(archivoLog, "Empieza el thread planificadorFIFO.\n");
+
+		int* cpu = malloc(sizeof(int));
+
+		while(1){
+
+			if (! (queue_is_empty(queueCPULibre) || queue_is_empty(queueReady))){
+
+				procesoCorriendo_t* proceso = malloc(sizeof(procesoCorriendo_t));
+
+				pthread_mutex_lock(&mutexQueueReady);
+				pcb_t* auxPCB = queue_pop(queueReady);
+				pthread_mutex_unlock(&mutexQueueReady);
+
+				log_info(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
+				log_debug(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
+
+				pthread_mutex_lock(&mutexQueueCPULibre);
+				cpu = queue_pop(queueCPULibre);
+				pthread_mutex_unlock(&mutexQueueCPULibre);
+
+				//Cambia el estado del proceso
+				auxPCB->estadoProceso = RUNNING;
+
+				pthread_mutex_lock(&mutexQueueCPU);
+				queue_push(queueCPU, cpu);
+				pthread_mutex_unlock(&mutexQueueCPU);
+
+				pthread_mutex_lock(&mutexQueueRunning);
+				queue_push(queueRunning, auxPCB);
+				pthread_mutex_unlock(&mutexQueueRunning);
+
+				proceso->proceso = auxPCB;
+				proceso->cpu = *cpu;
+
+				log_info(archivoLog, "Empieza la ejecución de proceso:%i", auxPCB->processID);
+				log_debug(archivoLog, "Proceso a Ejecutar: %i", auxPCB->processID);
+
+				correrSegunQuantum();
+
+			}
+		}
 }
 
 //Al ser un KLT usar sleep y se clava solo el hilo
@@ -485,7 +531,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	int tamanioPaquete = sizeof(int) * 3 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
-	serializarChar(serializarInt(serializarInt(serializarInt(paquete, cpu), pcb->processID), pcb->programCounter),pcb->path);
+	serializarChar(serializarInt(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), cpu), pcb->processID), pcb->programCounter),pcb->path);
 
 	send(clienteCPU, paquete, tamanioPaquete, 0);
 
@@ -514,7 +560,8 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		char* resultadoRafaga = malloc(*tamanioResultado);
 		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
-		//TODO Loggear el resultado
+		log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+		log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 		free(tamanioResultado);
 		free(resultadoRafaga);
@@ -546,7 +593,10 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		char* resultadoRafaga = malloc(*tamanioResultado);
 		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
-		//TODO Loggear el resultado
+		log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+		log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+
+		free(resultadoRafaga);
 
 		pthread_mutex_lock(&mutexQueueBlocked);
 
@@ -572,7 +622,8 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		char* resultadoRafaga = malloc(*tamanioResultado);
 		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
-		//TODO Loggear el resultado
+		log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+		log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 		free(tamanioResultado);
 		free(resultadoRafaga);
@@ -597,4 +648,20 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	cpu	= queue_pop(queueCPU);
 	queue_push(queueCPULibre, &cpu);
 	pthread_mutex_unlock(&mutexQueueCPULibre);
+}
+
+void correrSegunQuantum(){
+
+			procesoCorriendo_t* proceso = malloc(sizeof(procesoCorriendo_t));
+
+	int i;
+	for(i=0; i <= quantum; i++){
+			//Comienza un thread para mantener el proceso corriendo y seguirlo
+			pthread_t threadProceso;
+			pthread_create(&threadProceso, NULL, (void *) procesoCorriendo, &proceso);
+	}
+			pcb_t *pcb = queue_pop(queueRunning);
+			queue_push(queueReady, pcb);
+			pcb = queue_pop(queueReady);
+			queue_push(queueRunning, pcb);
 }
