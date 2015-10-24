@@ -32,6 +32,20 @@
 
 #define BACKLOG 5
 
+//Operaciones
+typedef enum {
+	INICIARPROCESO = 0,
+	ENTRADASALIDA = 1,
+	INICIOMEMORIA = 2,
+	LEERMEMORIA = 3,
+	ESCRIBIRMEMORIA = 4,
+	FINALIZARPROCESO = 5,
+	RAFAGAPROCESO = 6,
+	PROCESOBLOQUEADO = 7
+} operacion_t;
+
+#pragma pack(1)
+
 //Recepcion de info de Memoria
 typedef struct {
 	int processID;
@@ -44,19 +58,6 @@ typedef struct {
 	int disponibilidad;
 	int proceso;
 } pagina_t;
-
-//Operaciones
-
-typedef enum {
-	INICIARPROCESO = 0,
-	ENTRADASALIDA = 1,
-	INICIOMEMORIA = 2,
-	LEERMEMORIA = 3,
-	ESCRIBIRMEMORIA = 4,
-	FINALIZARPROCESO = 5,
-	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7
-} operacion_t;
 
 t_log* archivoLog;
 t_log* logDebug;
@@ -104,12 +105,12 @@ int main(int argc, char** argv) {
 
 	//Configuro el servidor
 	configurarSocketServidor();
-/*
+
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteMemoria = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso Memoria %i. \n", clienteMemoria);
-*/
+
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
 
@@ -273,7 +274,6 @@ void admDeEspacios(){
 
 			case FINALIZARPROCESO:{
 
-				//Recibe la peticion por parte de Memoria de eliminar un proceso
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 
 				tamanioPaquete = sizeof(int);
@@ -514,6 +514,7 @@ int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 
 			fseek(archivoSwap, posicion, SEEK_SET);
 			//TODO Escribir el contenido y el resto '/0' para no tener basura
+			int diferencia = tamanioPagina - strlen(contenido);
 			fputs(contenido, archivoSwap);
 
 			return 1;

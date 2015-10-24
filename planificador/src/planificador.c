@@ -75,6 +75,8 @@ int pIDContador = 1;
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
 
+#pragma pack(1)
+
 typedef struct {
 	char* comando;
 	char* parametro;
@@ -115,7 +117,7 @@ void comandoCPU();
 
 //Funciones de planificador
 int buscarYEliminarEnCola(t_queue* cola, int pid);
-void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino);
+void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
 void entradaSalida();
 void procesoCorriendo();
 
@@ -178,7 +180,6 @@ int main(int argc, char** argv) {
 		pthread_join(hiloPlanificadorRR, NULL);
 	}
 
-	pthread_join(hiloConsola, NULL);
 	return 0;
 }
 
@@ -379,7 +380,7 @@ void planificadorFIFO() {
 
 		if (! (queue_is_empty(queueCPULibre) || queue_is_empty(queueReady))){
 
-			procesoCorriendo_t proceso;
+			procesoCorriendo_t* proceso = malloc(sizeof(procesoCorriendo_t));
 
 			pthread_mutex_lock(&mutexQueueReady);
 			pcb_t* auxPCB = queue_pop(queueReady);
@@ -402,8 +403,8 @@ void planificadorFIFO() {
 			queue_push(queueRunning, auxPCB);
 			pthread_mutex_unlock(&mutexQueueRunning);
 
-			proceso.proceso = auxPCB;
-			proceso.cpu = *cpu;
+			proceso->proceso = auxPCB;
+			proceso->cpu = *cpu;
 
 			log_info(archivoLog, "Empieza la ejecución de proceso:%i", auxPCB->processID);
 
@@ -415,7 +416,7 @@ void planificadorFIFO() {
 	}
 }
 
-void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
+void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
 	pcb_t* aux = malloc(sizeof(pcb_t));
 	t_queue* queueAux = malloc(sizeof(t_queue));
@@ -424,8 +425,15 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino){
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID){
 
+			if(tiempoBlocked != NULL){
+				procesoBlocked_t* proceso;
+				proceso->tiempoDormido = *tiempoBlocked;
+				proceso->pcb = pcb;
+				queue_push(colaDestino, proceso);
+			}
+
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			if(colaDestino != NULL)
+			if(colaDestino != NULL && tiempoBlocked == NULL)
 				queue_push(colaDestino, pcb);
 
 			break;
@@ -468,10 +476,10 @@ void entradaSalida(){
 
 }
 
-void procesoCorriendo(procesoCorriendo_t proceso){
+void procesoCorriendo(procesoCorriendo_t* proceso){
 
-	int cpu = proceso.cpu;
-	pcb_t* pcb = proceso.proceso;
+	int cpu = proceso->cpu;
+	pcb_t* pcb = proceso->proceso;
 
 	//Envio el proceso que va a correr despues
 	int tamanioPaquete = sizeof(int) * 3 + strlen(pcb->path) + 1;
@@ -483,73 +491,110 @@ void procesoCorriendo(procesoCorriendo_t proceso){
 
 	free(paquete);
 
-	int* proceso = malloc(sizeof(int));
-	int* procedimiento = malloc(sizeof(int));
-	
-	while(proceso != pcb->processID){
-		recibirYDeserializarInt(procedimiento, clienteCPU);
-	
-		recibirYDeserializarInt(proceso, clienteCPU);
+	int* idProceso = malloc(sizeof(int));
+
+	while(*idProceso != pcb->processID){
+		recibirYDeserializarInt(idProceso, clienteCPU);
 	}
-	free(proceso);
+	free(idProceso);
 	
-	if(*procedimiento == FINALIZARPROCESO){
-		int* formaFinalizacion = malloc(sizeof(int));
-		recibirYDeserializarInt(formaFinalizacion, clienteCPU);
+	int* formaFinalizacion = malloc(sizeof(int));
+	recibirYDeserializarInt(formaFinalizacion, clienteCPU);
 
-		switch(*formaFinalizacion){
+	switch(*formaFinalizacion){
 
-		case RAFAGAPROCESO:{
+	case RAFAGAPROCESO:{
 
-			pthread_mutex_lock(&mutexQueueReady);
-			finalizarRafaga(pcb, queueReady);
-			pthread_mutex_unlock(&mutexQueueReady);
+		int* programCounter = malloc(sizeof(int));
+		recibirYDeserializarInt(programCounter, clienteCPU);
 
-			log_info(archivoLog, "Se acabo la rafaga de %i.\n", pcb->processID);
+		int* tamanioResultado = malloc(sizeof(int));
+		recibirYDeserializarInt(tamanioResultado, clienteCPU);
 
-			break;
-		}
-		case PROCESOBLOQUEADO:{
-			int* tiempoBloqueado = malloc(sizeof(int));
-			recibirYDeserializarInt(tiempoBloqueado, clienteCPU);
+		char* resultadoRafaga = malloc(*tamanioResultado);
+		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
-			pthread_mutex_lock(&mutexQueueBlocked);
-			finalizarRafaga(pcb, queueBlocked);
-			pthread_mutex_unlock(&mutexQueueBlocked);
+		//TODO Loggear el resultado
 
-			log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
+		free(tamanioResultado);
+		free(resultadoRafaga);
 
-			free(tiempoBloqueado);
-			break;
-		}
+		pthread_mutex_lock(&mutexQueueReady);
+		finalizarRafaga(pcb, queueReady, NULL);
+		pthread_mutex_unlock(&mutexQueueReady);
+
+		pcb->estadoProceso = READY;
+		pcb->programCounter = *programCounter;
+
+		free(programCounter);
+
+		log_info(archivoLog, "Se acabo la rafaga de %i.\n", pcb->processID);
+
+		break;
+	}
+	case PROCESOBLOQUEADO:{
+
+		int* programCounter = malloc(sizeof(int));
+		recibirYDeserializarInt(programCounter, clienteCPU);
+
+		int* tiempoBloqueado = malloc(sizeof(int));
+		recibirYDeserializarInt(tiempoBloqueado, clienteCPU);
+
+		int* tamanioResultado = malloc(sizeof(int));
+		recibirYDeserializarInt(tamanioResultado, clienteCPU);
+
+		char* resultadoRafaga = malloc(*tamanioResultado);
+		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
+
+		//TODO Loggear el resultado
+
+		pthread_mutex_lock(&mutexQueueBlocked);
+
+		finalizarRafaga(pcb, queueBlocked, tiempoBloqueado);
+		pthread_mutex_unlock(&mutexQueueBlocked);
+
+		pcb->estadoProceso = BLOCKED;
+		pcb->programCounter = *programCounter;
+
+		free(programCounter);
+
+		log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
+
+		free(tiempoBloqueado);
+		break;
+	}
 		
-		case FINALIZAPROCESO:{
-			pthread_mutex_lock(&mutexQueueReady);
-			finalizarRafaga(pcb, NULL);
-			pthread_mutex_unlock(&mutexQueueReady);
+	case FINALIZAPROCESO:{
 
-			log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
+		int* tamanioResultado = malloc(sizeof(int));
+		recibirYDeserializarInt(tamanioResultado, clienteCPU);
 
-			recibirYDeserializarInt(&tamanioPaquete, clienteCPU);
-			//TODO Loggear el resultado final en un archivo de logs, cambiar el otro archivo por un debugger
-			char* resultadoTotal = malloc(tamanioPaquete);
-			log_info(archivoLog, resultadoTotal);
-			free(resultadoTotal);
-		}
-		free(formaFinalizacion);
+		char* resultadoRafaga = malloc(*tamanioResultado);
+		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
-	} else {
+		//TODO Loggear el resultado
 
-		finalizarProceso(pcb->processID);
+		free(tamanioResultado);
+		free(resultadoRafaga);
+
+		pthread_mutex_lock(&mutexQueueReady);
+		finalizarRafaga(pcb, NULL, NULL);
+		pthread_mutex_unlock(&mutexQueueReady);
+
+		log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
+
+		recibirYDeserializarInt(&tamanioPaquete, clienteCPU);
+
+		char* resultadoTotal = malloc(tamanioPaquete);
+		log_info(archivoLog, resultadoTotal);
+		free(resultadoTotal);
+	}
+	free(formaFinalizacion);
 	}
 
 	//Libero la CPU
 	pthread_mutex_lock(&mutexQueueCPULibre);
 	cpu	= queue_pop(queueCPU);
 	queue_push(queueCPULibre, &cpu);
-
 	pthread_mutex_unlock(&mutexQueueCPULibre);
-
-	free(procedimiento);
-
 }
