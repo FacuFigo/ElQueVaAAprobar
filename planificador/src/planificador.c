@@ -156,9 +156,18 @@ int main(int argc, char** argv) {
 	recibirYDeserializarInt(cantCPU, clienteCPU);
 	int i;
 	for(i = 0; i <= *cantCPU; i++){
-		queue_push(queueCPULibre, &clienteCPU);
+		queue_push(queueCPULibre, &i);
 	}
 	free(cantCPU);
+
+	//Envio el quantum a CPU
+	char* paquete = malloc(sizeof(int));
+	if(string_equals_ignore_case(algoritmo, "FIFO"))
+		serializarInt(paquete, -1);
+	else
+		serializarInt(paquete, quantum);
+	send(clienteCPU, paquete, sizeof(int), 0);
+	free(paquete);
 
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
@@ -237,7 +246,7 @@ void manejoDeConsola() {
 		comando.parametro = malloc(50);
 		
 //TODO Cambiar scanf() por fgets()
-		fgets("%s %s", comando.comando, comando.parametro);
+		scanf("%s %s", comando.comando, comando.parametro);
 		getchar();
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
@@ -429,14 +438,16 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 		if(pcb->processID == aux->processID){
 
 			if(tiempoBlocked != NULL){
-				procesoBlocked_t* proceso;
+				procesoBlocked_t* proceso = malloc(sizeof(procesoBlocked_t));
 				proceso->tiempoDormido = *tiempoBlocked;
 				proceso->pcb = pcb;
 				queue_push(colaDestino, proceso);
+				free(proceso);
+				break;
 			}
 
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			if(colaDestino != NULL && tiempoBlocked == NULL)
+			if(colaDestino != NULL)
 				queue_push(colaDestino, pcb);
 
 			break;
@@ -561,7 +572,6 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		recibirYDeserializarChar(&resultadoRafaga, clienteCPU);
 
 		log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-		log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 		free(tamanioResultado);
 		free(resultadoRafaga);
@@ -575,7 +585,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 		free(programCounter);
 
-		log_info(archivoLog, "Se acabo la rafaga de %i.\n", pcb->processID);
+		log_debug(archivoLogDebug, "Se acabo la rafaga de %i.\n", pcb->processID);
 
 		break;
 	}
