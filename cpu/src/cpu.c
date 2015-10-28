@@ -52,8 +52,7 @@ int socketPlanificador;
 int socketMemoria;
 int programCounter;
 int threadCounter;
-int quantum;
-//int algoritmo; //lo pongo como int pensando en que sea 1 si es fifo y 0 si es rr.. Podria ser char* ?
+int quantum; //si es -1, toy en fifo
 
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
@@ -224,9 +223,8 @@ void ejecutarmProc() {
 		instruccion = leidoSplit[0];
 		log_info(archivoLog, "Conectado a la Memoria %s.\n", instruccion);
 
-		while (!feof(mCod)&&!entradaSalida&&quantumRafaga>0) { //TODO resolver el caso fifo
+		while (!feof(mCod)&&!entradaSalida) {
 			programCounter++;
-			quantumRafaga--;
 			if (string_equals_ignore_case(instruccion, "iniciar")) {
 				int cantPaginas= strtol(leidoSplit[1], NULL, 10);
 				iniciarmProc(pID, cantPaginas);
@@ -283,12 +281,12 @@ void ejecutarmProc() {
 			}
 			if (string_equals_ignore_case(instruccion, "entrada-salida")) {
 				tiempoIO= strtol(leidoSplit[1], NULL, 10);
-				//entradaSalidamProc(pID, tiempoIO);
+				entradaSalidamProc(pID, tiempoIO);
 				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
 				free(aux);
-				operacion = ENTRADASALIDA;
+				//operacion = ENTRADASALIDA;
 				entradaSalida=1;
 
 			}
@@ -309,7 +307,14 @@ void ejecutarmProc() {
 			sleep(retardo);
 			fgets(comandoLeido, 30, mCod);
 
-		}
+			if (quantum != -1) {
+				quantumRafaga--;
+				if (quantumRafaga == 0) {
+					break;
+				}
+			}
+
+		}//fin del super while
 
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 		//free(comandoLeido);
@@ -317,21 +322,13 @@ void ejecutarmProc() {
 		fclose(mCod);
 		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 		paqueteRafaga = malloc(tamanioPaquete);
-		switch(operacion){
-			case RAFAGAPROCESO:
-				break;
-			case FINALIZARPROCESO:
-				break;
-			case ENTRADASALIDA:
-				break;
-		}
 		serializarInt(serializarChar(paqueteRafaga, resultadosTot), RAFAGAPROCESO); //pID, formaDeFinalizacion
 		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
 
 	}//fin del while 1
-}
+}//fin de ejecutar mproc
 
 
 
