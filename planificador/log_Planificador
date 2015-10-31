@@ -1,2 +1,20 @@
 [INFO] 10:29:51:895 Planificador/(3392:3392): Archivo de logs creado.
 
+[INFO] 20:20:18:482 Planificador/(2920:2920): Servidor creado. 5
+
+[INFO] 20:28:45:450 Planificador/(3079:3079): Servidor creado. 5
+
+[INFO] 20:18:44:357 Planificador/(2471:2471): Servidor creado. 5
+
+[INFO] 20:20:21:64 Planificador/(2539:2539): Servidor creado. 5
+
+[ERROR] 20:20:40:644 Planificador/(2554:2554): Falló el bind
+[INFO] 20:20:40:644 Planificador/(2554:2554): Se conecta el proceso CPU -1
+
+[INFO] 20:20:40:644 Planificador/(2554:2554): FIFO
+[INFO] 20:20:40:650 Planificador/(2554:2557): Empieza el thread planificadorFIFO.
+
+[DEBUG] 20:20:40:650 Planificador/(2554:2557): Empieza el thread planificadorFIFO.
+
+[INFO] 20:20:52:262 Planificador/(2554:2555): Se genero el PCB del proceso 1.
+[ERROR] 20:37:45:215 Planificador/(2731:2731): Falló el bind

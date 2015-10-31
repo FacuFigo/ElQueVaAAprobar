@@ -52,6 +52,7 @@ int socketPlanificador;
 int socketMemoria;
 int programCounter;
 int threadCounter;
+int quantum; //si es -1, toy en fifo
 
 void configurarCPU(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
@@ -94,8 +95,10 @@ int main(int argc, char** argv) {
 		log_info(archivoLog, "Instancia de CPU %d creada", threadCounter);
 	}
 
-	//se saco el join --> buscar un super join
-
+	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
+		pthread_join(&hilos[threadCounter],NULL);//se saco el join --> buscar un super join
+		log_info(archivoLog, "Termino hilo de CPU %i", threadCounter);
+	}
 	return 0;
 
 }
@@ -188,126 +191,144 @@ void ejecutarmProc() {
 	FILE* mCod;
 	int pID;
 	int programCounter;
+	int tiempoIO;
 	char* path;
 	int tamanioPaquete;
-	char* comandoLeido = malloc(30); //a cambiar en posteriores checkpoints
+	char comandoLeido[30]; //a cambiar en posteriores checkpoints
 	char* instruccion;
-	char* resultadosTot = string_new();
 	char* paqueteRafaga;
+	operacion_t operacion;
+	int entradaSalida;
+	int quantumRafaga;
 
-	recibirYDeserializarInt(&pID, socketPlanificador);
-	log_info(archivoLog, "Recibi pid %i.\n", pID);
-	recibirYDeserializarInt(&programCounter, socketPlanificador);
-	log_info(archivoLog, "Recibi program counter %i.\n", programCounter);
-	recibirYDeserializarChar(&path, socketPlanificador);
-	log_info(archivoLog, "Recibi path %s.\n", path);
+	while(1){
+		quantumRafaga = quantum;
+		entradaSalida=0;
+		operacion = RAFAGAPROCESO;
+		char* resultadosTot = string_new();
+		recibirYDeserializarInt(&pID, socketPlanificador);
+		log_info(archivoLog, "Recibi pid %i.\n", pID);
+		recibirYDeserializarInt(&programCounter, socketPlanificador);
+		log_info(archivoLog, "Recibi program counter %i.\n", programCounter);
+		recibirYDeserializarChar(&path, socketPlanificador);
+		log_info(archivoLog, "Recibi path %s.\n", path);
 
-	//mCod = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/cpu/Debug/%s",path), "r");
-	mCod=fopen(path,"r");
-	log_info(archivoLog, "Conectado a la Memoria %i.\n", mCod);
+		//mCod = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/cpu/Debug/%s",path), "r");
+		mCod=fopen(path,"r");
+		log_info(archivoLog, "Conectado a la Memoria %i.\n", mCod);
 
-	fgets(comandoLeido, 30, mCod);
-
-	char** leidoSplit = string_split(comandoLeido, " ");
-	instruccion = leidoSplit[0];
-	log_info(archivoLog, "Conectado a la Memoria %s.\n", instruccion);
-
-	while (!feof(mCod)) {
-		programCounter++;
-
-		if (string_equals_ignore_case(instruccion, "iniciar")) {
-			int cantPaginas= strtol(leidoSplit[1], NULL, 10);
-			iniciarmProc(pID, cantPaginas);
-			int verificador;
-			recibirYDeserializarInt(&verificador, socketMemoria);
-			if (verificador != -1) {
-				log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d iniciado",	cantPaginas, pID);
-				char* aux = string_from_format("mProc %d - Iniciado", pID);
-				string_append(&resultadosTot, aux);
-				free(aux);
-			}
-			else {
-				log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d. FALLO!",cantPaginas, pID);
-				char* aux = string_from_format("mProc %d - Fallo", pID);
-				string_append(&resultadosTot, aux);
-				free(aux);
-			}
-		}
-
-		if (string_equals_ignore_case(instruccion, "leer")) {
-			int nroPagina=strtol(leidoSplit[1], NULL, 10);
-			leermProc(pID, nroPagina);
-			int verificador;
-			recibirYDeserializarInt(&verificador, socketMemoria);
-			if (verificador != -1) {
-				char* resultado = malloc(sizeof(char) * 25);
-				recibirYDeserializarChar(&resultado, socketMemoria);
-				log_info(archivoLog,"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",nroPagina, pID, resultado);
-				char* aux = string_from_format("mProc %d - Pagina %d leida: %s", pID, nroPagina, resultado);
-				string_append(&resultadosTot, aux);
-				free(resultado);
-				free(aux);
-			} else {
-				log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
-			}
-		}
-		if (string_equals_ignore_case(instruccion, "escribir")) {
-			int nroPagina=strtol(leidoSplit[1], NULL, 10);
-			char* texto=malloc(30);
-//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
-			escribirmProc(pID, nroPagina, texto);
-			int verificador;
-			recibirYDeserializarInt(&verificador,socketMemoria);
-			if (verificador!= -1){
-				log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s", nroPagina,texto, pID, texto);
-				char* aux= string_from_format("mProc %d - Pagina %d escrita:%s",pID, nroPagina, texto);
-				string_append(&resultadosTot, aux);
-				free(aux);
-			}
-			else{
-				log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
-			}
-
-		}
-		if (string_equals_ignore_case(instruccion, "entrada-salida")) {
-			int tiempo= strtol(leidoSplit[1], NULL, 10);
-			entradaSalidamProc(pID, tiempo);
-			log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempo, pID);
-			char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempo);
-			string_append(&resultadosTot, aux);
-			free(aux);
-
-		}
-		if (string_equals_ignore_case(instruccion, "finalizar")) {
-			finalizarmProc(pID);
-			int verificador;
-			recibirYDeserializarInt(&verificador, socketMemoria);
-			if (verificador != -1) {
-				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
-				char* aux = string_from_format("mProc %d finalizado",pID);
-				string_append(&resultadosTot, aux);
-			} else {
-				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
-			}
-		}
-
-		sleep(retardo);
 		fgets(comandoLeido, 30, mCod);
 
-	}
+		char** leidoSplit = string_split(comandoLeido, " ");
+		instruccion = leidoSplit[0];
+		log_info(archivoLog, "Conectado a la Memoria %s.\n", instruccion);
 
-	log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
-	free(comandoLeido);
-	free(leidoSplit);
-	fclose(mCod);
-	tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
-	paqueteRafaga = malloc(tamanioPaquete);
-	serializarInt(serializarChar(paqueteRafaga, resultadosTot), RAFAGAPROCESO);
-	send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
-	free(resultadosTot);
-	free(paqueteRafaga);
+		while (!feof(mCod)&&!entradaSalida) {
+			programCounter++;
+			if (string_equals_ignore_case(instruccion, "iniciar")) {
+				int cantPaginas= strtol(leidoSplit[1], NULL, 10);
+				iniciarmProc(pID, cantPaginas);
+				int verificador;
+				recibirYDeserializarInt(&verificador, socketMemoria);
+				if (verificador != -1) {
+					log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d iniciado",	cantPaginas, pID);
+					char* aux = string_from_format("mProc %d - Iniciado", pID);
+					string_append(&resultadosTot, aux);
+					free(aux);
+				}
+				else {
+					log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d. FALLO!",cantPaginas, pID);
+					char* aux = string_from_format("mProc %d - Fallo", pID);
+					string_append(&resultadosTot, aux);
+					free(aux);
+				}
+			}
 
-}
+			if (string_equals_ignore_case(instruccion, "leer")) {
+				int nroPagina=strtol(leidoSplit[1], NULL, 10);
+				leermProc(pID, nroPagina);
+				int verificador;
+				recibirYDeserializarInt(&verificador, socketMemoria);
+				if (verificador != -1) {
+					char* resultado = malloc(sizeof(char) * 25);
+					recibirYDeserializarChar(&resultado, socketMemoria);
+					log_info(archivoLog,"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",nroPagina, pID, resultado);
+					char* aux = string_from_format("mProc %d - Pagina %d leida: %s", pID, nroPagina, resultado);
+					string_append(&resultadosTot, aux);
+					free(resultado);
+					free(aux);
+				} else {
+					log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
+				}
+			}
+			if (string_equals_ignore_case(instruccion, "escribir")) {
+				int nroPagina=strtol(leidoSplit[1], NULL, 10);
+				char* texto=malloc(30);
+	//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
+				escribirmProc(pID, nroPagina, texto);
+				int verificador;
+				recibirYDeserializarInt(&verificador,socketMemoria);
+				if (verificador!= -1){
+					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s", nroPagina,texto, pID, texto);
+					char* aux= string_from_format("mProc %d - Pagina %d escrita:%s",pID, nroPagina, texto);
+					string_append(&resultadosTot, aux);
+					free(aux);
+				}
+				else{
+					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
+				}
+
+			}
+			if (string_equals_ignore_case(instruccion, "entrada-salida")) {
+				tiempoIO= strtol(leidoSplit[1], NULL, 10);
+				entradaSalidamProc(pID, tiempoIO);
+				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
+				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
+				string_append(&resultadosTot, aux);
+				free(aux);
+				//operacion = ENTRADASALIDA;
+				entradaSalida=1;
+
+			}
+			if (string_equals_ignore_case(instruccion, "finalizar")) {
+				finalizarmProc(pID);
+				int verificador;
+				recibirYDeserializarInt(&verificador, socketMemoria);
+				if (verificador != -1) {
+					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
+					char* aux = string_from_format("mProc %d finalizado",pID);
+					string_append(&resultadosTot, aux);
+				} else {
+					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
+				}
+				operacion = FINALIZARPROCESO;
+			}
+
+			sleep(retardo);
+			fgets(comandoLeido, 30, mCod);
+
+			if (quantum != -1) {
+				quantumRafaga--;
+				if (quantumRafaga == 0) {
+					break;
+				}
+			}
+
+		}//fin del super while
+
+		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
+		//free(comandoLeido);
+		free(leidoSplit);
+		fclose(mCod);
+		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
+		paqueteRafaga = malloc(tamanioPaquete);
+		serializarInt(serializarChar(paqueteRafaga, resultadosTot), RAFAGAPROCESO); //pID, formaDeFinalizacion
+		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
+		free(resultadosTot);
+		free(paqueteRafaga);
+
+	}//fin del while 1
+}//fin de ejecutar mproc
 
 
 
@@ -323,8 +344,3 @@ void ejecutarmProc() {
 	}
 
 }*/
-
-
-
-
-
