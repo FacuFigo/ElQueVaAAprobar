@@ -3,6 +3,7 @@
 	<name>admSwap</name>
 	<comment></comment>
 	<projects>
+		<project>sockets</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

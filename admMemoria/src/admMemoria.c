@@ -29,7 +29,8 @@
 #include <commons/string.h>
 #include <commons/collections/list.h>
 #include <commons/collections/queue.h>
-#include "../../sockets/sockets.h"
+#include <commons/collections/dictionary.h>
+#include <sockets.h>
 
 #define BACKLOG 5
 
@@ -46,6 +47,14 @@ typedef enum {
 	PROCESOBLOQUEADO = 7
 } operacion_t;
 
+typedef struct {
+	int processID;
+	int nroMarco;
+	int bitPresencia;
+	int bitModificado;
+	int tiempoLRU;
+} process_t;
+
 int puertoEscucha;
 char* ipSwap;
 int puertoSwap;
@@ -58,12 +67,16 @@ char* TLBHabilitada;
 int retardoMemoria;
 int socketSwap;
 int clienteCPU;
+void* memoriaPrincipal;
+t_dictionary *tablaDeProcesos;
+
 
 typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
 
 void configurarAdmMemoria(char* config);
 int configurarSocketCliente(char* ip, int puerto, int*);
 int configurarSocketServidor();
+void admDeMemoria();
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -85,11 +98,11 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPU);
 
-	admDeMemoria();
-	/*pthread_t admDeMemoria;
-	pthread_create(&admDeMemoria, NULL, (void *)admDeMemoria, NULL);
+	//admDeMemoria();
+	pthread_t hiloMemoria;
+	pthread_create(&hiloMemoria, NULL, (void *)admDeMemoria, NULL);
 
-	pthread_join(admDeMemoria, NULL);*/
+	pthread_join(admDeMemoria, NULL);
 
 	return 0;
 }
@@ -135,7 +148,6 @@ int configurarSocketCliente(char* ip, int puerto, int* s) {
 }
 
 int configurarSocketServidor() {
-
 	struct sockaddr_in direccionServidor;
 	direccionServidor.sin_family = AF_INET;
 	direccionServidor.sin_addr.s_addr = INADDR_ANY;
@@ -160,7 +172,8 @@ int configurarSocketServidor() {
 }
 
 void admDeMemoria(){
-
+	memoriaPrincipal = malloc (cantidadMarcos*tamanioMarco);
+	tablaDeProcesos = dictionary_create();
 	while(1){
 		int instruccion;
 		recibirYDeserializarInt(&instruccion, clienteCPU);
