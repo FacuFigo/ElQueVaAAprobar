@@ -1,22 +1,15 @@
 /*
- * sockets.h
+ * sockets.c
  *
- *  Created on: 29/9/2015
+ *  Created on: 19/10/2015
  *      Author: utnso
  */
 
-#ifndef SOCKETS_H_
-#define SOCKETS_H_
-/*
-typedef enum {
-	INICIARPROCESO,
-	ENTRADASALIDA,
-	INICIOMEMORIA,
-	LEERMEMORIA,
-	ESCRIBIRMEMORIA,
-	FINALIZARPROCESO
-} operacion_t;
-*/
+#include "sockets.h"
+#include <stdint.h>
+#include <netdb.h>
+#include <string.h>
+#include <stdlib.h>
 
 char* serializarChar(char* paqueteSerializado,char* texto) {
 	int tamTexto = strlen(texto)+1;
@@ -66,6 +59,3 @@ int recibirYDeserializarInt(int *package, int socketCliente) {
 	free(buffer);
 	return status;
 }
-
-
-#endif /* SOCKETS_H_ */
