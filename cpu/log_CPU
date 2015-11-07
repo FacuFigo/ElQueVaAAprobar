@@ -1,2 +1,58 @@
 [INFO] 19:33:07:368 CPU/(2977:2977): Archivo de logs creado.
 
+[INFO] 21:20:43:469 CPU/(2640:2640): Archivo de logs creado.
+
+[ERROR] 21:20:43:473 CPU/(2640:2640): No se pudo conectar
+[ERROR] 21:20:43:474 CPU/(2640:2640): Error al conectar con Planificador. 127.0.0.1
+
+[ERROR] 21:20:43:474 CPU/(2640:2640): No se pudo conectar
+[ERROR] 21:20:43:474 CPU/(2640:2640): Error al conectar con Memoria. 127.0.0.1
+
+[INFO] 21:20:43:474 CPU/(2640:2640): Instancia de CPU 0 creada
+[INFO] 21:20:43:474 CPU/(2640:2640): Instancia de CPU 1 creada
+[INFO] 21:20:43:474 CPU/(2640:2640): Termino hilo de CPU 0
+[INFO] 21:20:43:474 CPU/(2640:2640): Termino hilo de CPU 1
+[INFO] 21:38:01:489 CPU/(2791:2791): Archivo de logs creado.
+
+[ERROR] 21:54:36:832 CPU/(2791:2791): No se pudo conectar
+[ERROR] 21:54:36:832 CPU/(2791:2791): Error al conectar con Planificador. 127.0.0.1
+
+[ERROR] 21:54:36:832 CPU/(2791:2791): No se pudo conectar
+[ERROR] 21:54:36:832 CPU/(2791:2791): Error al conectar con Memoria. 127.0.0.1
+
+[INFO] 21:57:44:812 CPU/(2791:2791): Instancia de CPU 0 creada
+[INFO] 21:57:44:812 CPU/(2791:3159): Recibi pid 0.
+
+[INFO] 21:57:44:812 CPU/(2791:3159): Recibi program counter 0.
+
+[INFO] 21:57:44:813 CPU/(2791:3159): Recibi path (null).
+
+[INFO] 21:57:44:813 CPU/(2791:3159): Conectado a la Memoria 0.
+
+[INFO] 22:06:52:973 CPU/(3355:3355): Archivo de logs creado.
+
+[ERROR] 22:09:55:404 CPU/(3355:3355): No se pudo conectar
+[ERROR] 22:09:59:551 CPU/(3355:3355): Error al conectar con Planificador. 127.0.0.1
+
+[ERROR] 22:10:05:839 CPU/(3355:3355): No se pudo conectar
+[ERROR] 22:10:07:579 CPU/(3355:3355): Error al conectar con Memoria. 127.0.0.1
+
+[INFO] 00:45:08:809 CPU/(2337:2337): Archivo de logs creado.
+
+[INFO] 00:50:08:109 CPU/(2440:2440): Archivo de logs creado.
+
+[ERROR] 00:56:09:165 CPU/(2440:2440): No se pudo conectar
+[ERROR] 00:56:13:508 CPU/(2440:2440): Error al conectar con Planificador. 127.0.0.1
+
+[ERROR] 00:56:28:79 CPU/(2440:2440): No se pudo conectar
+[ERROR] 00:56:33:735 CPU/(2440:2440): Error al conectar con Memoria. 127.0.0.1
+
+[INFO] 00:56:42:501 CPU/(2440:2496): Recibi pid 0.
+
+[INFO] 00:56:42:502 CPU/(2440:2496): Recibi program counter 0.
+
+[INFO] 00:56:42:502 CPU/(2440:2496): Recibi path (null).
+
+[INFO] 00:56:42:502 CPU/(2440:2496): Conectado a la Memoria 0.
+
+[INFO] 00:57:16:529 CPU/(2440:2440): Instancia de CPU 0 creada

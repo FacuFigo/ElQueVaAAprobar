@@ -28,7 +28,7 @@
 #include <commons/process.h>
 #include <commons/string.h>
 #include <commons/collections/list.h>
-#include "../../sockets.h"
+#include <sockets.h>
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -85,13 +85,20 @@ int main(int argc, char** argv) {
 	else
 		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
+	recibirYDeserializarInt(&quantum, socketPlanificador);
+	log_info(archivoLog, "Recibi quantum %d", quantum);
+
+	char* paquetecpu=malloc(sizeof(int));
+	serializarInt(paquetecpu, cantidadHilos);
+	send(socketPlanificador, paquetecpu, sizeof(int), 0);
+
+
 	// Empiezo a probar con multihilos
 
 	pthread_t hilos[cantidadHilos];
 
 	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
 		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
-//		int thread_id= process_get_thread_id();
 		log_info(archivoLog, "Instancia de CPU %d creada", threadCounter);
 	}
 
@@ -201,6 +208,7 @@ void ejecutarmProc() {
 	int entradaSalida;
 	int quantumRafaga;
 
+
 	while(1){
 		quantumRafaga = quantum;
 		entradaSalida=0;
@@ -213,15 +221,15 @@ void ejecutarmProc() {
 		recibirYDeserializarChar(&path, socketPlanificador);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
-		//mCod = fopen(string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/cpu/Debug/%s",path), "r");
+
 		mCod=fopen(path,"r");
-		log_info(archivoLog, "Conectado a la Memoria %i.\n", mCod);
+
 
 		fgets(comandoLeido, 30, mCod);
 
 		char** leidoSplit = string_split(comandoLeido, " ");
 		instruccion = leidoSplit[0];
-		log_info(archivoLog, "Conectado a la Memoria %s.\n", instruccion);
+
 
 		while (!feof(mCod)&&!entradaSalida) {
 			programCounter++;
@@ -286,7 +294,7 @@ void ejecutarmProc() {
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
 				free(aux);
-				//operacion = ENTRADASALIDA;
+				operacion = ENTRADASALIDA;
 				entradaSalida=1;
 
 			}
@@ -322,7 +330,7 @@ void ejecutarmProc() {
 		fclose(mCod);
 		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 		paqueteRafaga = malloc(tamanioPaquete);
-		serializarInt(serializarChar(paqueteRafaga, resultadosTot), RAFAGAPROCESO); //pID, formaDeFinalizacion
+		serializarInt(serializarChar(paqueteRafaga, resultadosTot), operacion); //pID, formaDeFinalizacion
 		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
