@@ -28,7 +28,7 @@
 #include <commons/string.h>
 #include <commons/collections/list.h>
 #include <commons/collections/queue.h>
-#include "../../sockets.h"
+#include <sockets.h>
 
 #define BACKLOG 5
 
@@ -138,10 +138,6 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-/*	while(!feof(archivoSwap)){
-		fputc('\0',archivoSwap);
-	}
-*/
 	//Creo la lista para la gestion de los espacios vacios
 	listaGestionEspacios = list_create();
 	log_debug(logDebug, "Se crea la lista para gestion de espacios.");
@@ -276,20 +272,19 @@ void admDeEspacios(){
 
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 
-				tamanioPaquete = sizeof(int);
-				char* paquete = malloc(tamanioPaquete);
+				char* paquete = malloc(sizeof(int));
 
 				if(liberarMemoria(proceso->processID) == -1){
 					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", proceso->processID);
 
 					serializarInt(paquete, -1);
-					send(clienteMemoria, paquete, tamanioPaquete, 0);
+					send(clienteMemoria, paquete, sizeof(int), 0);
 
 					free(paquete);
 				}else{
 					//Enviar confirmacion
 					serializarInt(paquete, 1);
-					send(clienteMemoria, paquete, tamanioPaquete, 0);
+					send(clienteMemoria, paquete, sizeof(int), 0);
 
 					free(paquete);
 				}
@@ -331,17 +326,13 @@ void admDeEspacios(){
 				int* paginaAEscribir = malloc(sizeof(int));
 				recibirYDeserializarInt(paginaAEscribir, clienteMemoria);
 
-				int* tamanioContenido = malloc(sizeof(int));
-				recibirYDeserializarInt(tamanioContenido, clienteMemoria);
-
-				char* contenido = malloc(*tamanioContenido);
+				char* contenido;
 				recibirYDeserializarChar(&contenido, clienteMemoria);
 
 				int resultado = escribirPagina(*pid, *paginaAEscribir, contenido);
 
 				//Enviar confirmacion y contenido a Memoria
 				tamanioPaquete = sizeof(int) * 2;
-
 				char* paquete = malloc(tamanioPaquete);
 
 				serializarInt(serializarInt(paquete, operacion), resultado);
@@ -349,7 +340,6 @@ void admDeEspacios(){
 				send(clienteMemoria, paquete, tamanioPaquete, 0);
 
 				free(paquete);
-				free(tamanioContenido);
 				free(contenido);
 				free(paginaAEscribir);
 
@@ -453,7 +443,7 @@ void liberarEspacioEnArchivo(int numeroDePagina){
 
 }
 
-//TODO Thread para realizar la escritura y lectura de memoria - CHECKPOINT 3 -
+//TODO Thread para realizar la escritura y lectura de memoria
 void escribirLeer(){
 
 }
@@ -513,9 +503,14 @@ int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 			int posicion = pagina->numeroPagina * tamanioPagina;
 
 			fseek(archivoSwap, posicion, SEEK_SET);
-			//TODO Escribir el contenido y el resto '/0' para no tener basura
+
 			int diferencia = tamanioPagina - strlen(contenido);
+			char* vacios = calloc(diferencia, sizeof(char));
+
 			fputs(contenido, archivoSwap);
+			fputs(vacios, archivoSwap);
+
+			free(vacios);
 
 			return 1;
 
