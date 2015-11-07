@@ -7,7 +7,6 @@
  Description : Hello World in C, Ansi-style
  ============================================================================
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -71,6 +70,8 @@ int main(int argc, char** argv) {
 
 	configurarCPU(argv[1]);
 
+	log_info(archivoLog, "cantidad de hilos: %d", cantidadHilos);
+
 	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 			&socketPlanificador))
@@ -97,13 +98,13 @@ int main(int argc, char** argv) {
 
 	pthread_t hilos[cantidadHilos];
 
-	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
+	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
 		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
-		log_info(archivoLog, "Instancia de CPU %d creada", threadCounter);
+		log_info(archivoLog, "Instancia de CPU %i creada.\n", threadCounter);
 	}
 
-	for(threadCounter=0; threadCounter<=cantidadHilos; threadCounter++ ){
-		pthread_join(&hilos[threadCounter],NULL);//se saco el join --> buscar un super join
+	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
+		pthread_join(hilos[threadCounter],NULL);//se saco el join --> buscar un super join
 		log_info(archivoLog, "Termino hilo de CPU %i", threadCounter);
 	}
 	return 0;
@@ -208,6 +209,14 @@ void ejecutarmProc() {
 	int entradaSalida;
 	int quantumRafaga;
 
+
+	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
+				&socketPlanificador))
+			log_info(archivoLog, "Conectado al Planificador %i.\n",
+					socketPlanificador);
+		else
+			log_error(archivoLog, "Error al conectar con Planificador. %s\n",
+					ipPlanificador);
 
 	while(1){
 		quantumRafaga = quantum;
@@ -340,7 +349,7 @@ void ejecutarmProc() {
 
 
 
-/*corregirTexto(char* textoOriginal,char* textoCorregido){
+corregirTexto(char* textoOriginal,char* textoCorregido){
 	int i=1;
 	int t=0;
 
@@ -351,4 +360,4 @@ void ejecutarmProc() {
 
 	}
 
-}*/
+}
