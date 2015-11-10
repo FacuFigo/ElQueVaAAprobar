@@ -25,11 +25,14 @@ endif
 # All Target
 all: planificador
 
+dependents:
+	-cd /home/utnso/tp-2015-2c-elquevaaaprobar/sockets/Debug && $(MAKE) all
+
 # Tool invocations
-planificador: $(OBJS) $(USER_OBJS)
+planificador: $(OBJS) $(USER_OBJS) /home/utnso/tp-2015-2c-elquevaaaprobar/sockets/Debug/libsockets.so
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	gcc  -o "planificador" $(OBJS) $(USER_OBJS) $(LIBS)
+	gcc -L"/home/utnso/tp-2015-2c-elquevaaaprobar/sockets/Debug" -o "planificador" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -40,5 +43,6 @@ clean:
 
 .PHONY: all clean dependents
 .SECONDARY:
+/home/utnso/tp-2015-2c-elquevaaaprobar/sockets/Debug/libsockets.so:
 
 -include ../makefile.targets

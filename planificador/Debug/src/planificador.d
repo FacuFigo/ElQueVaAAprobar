@@ -1,3 +1,4 @@
-src/planificador.d: ../src/planificador.c ../src/../../sockets.h
+src/planificador.d: ../src/planificador.c \
+ /home/utnso/tp-2015-2c-elquevaaaprobar/sockets/sockets.h
 
-../src/../../sockets.h:
+/home/utnso/tp-2015-2c-elquevaaaprobar/sockets/sockets.h:

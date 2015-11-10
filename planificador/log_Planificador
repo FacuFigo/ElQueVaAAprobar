@@ -1,20 +1,60 @@
-[INFO] 10:29:51:895 Planificador/(3392:3392): Archivo de logs creado.
+[INFO] 19:32:30:167 Planificador/(8007:8007): Servidor creado. 5
 
-[INFO] 20:20:18:482 Planificador/(2920:2920): Servidor creado. 5
+[ERROR] 19:32:42:610 Planificador/(8071:8071): Falló el bind
+[INFO] 19:32:42:610 Planificador/(8071:8071): Se conecta el proceso CPU -1
 
-[INFO] 20:28:45:450 Planificador/(3079:3079): Servidor creado. 5
+[INFO] 19:32:42:612 Planificador/(8071:8071): RR
+[INFO] 19:32:42:620 Planificador/(8071:8078): Empieza el thread planificador.
 
-[INFO] 20:18:44:357 Planificador/(2471:2471): Servidor creado. 5
+[INFO] 19:32:54:485 Planificador/(8071:8076): Se genero el PCB del proceso 1.
+[ERROR] 19:33:03:245 Planificador/(8096:8096): Falló el bind
+[INFO] 19:33:03:245 Planificador/(8096:8096): Se conecta el proceso CPU -1
 
-[INFO] 20:20:21:64 Planificador/(2539:2539): Servidor creado. 5
+[INFO] 19:33:03:246 Planificador/(8096:8096): RR
+[INFO] 19:33:03:262 Planificador/(8096:8100): Empieza el thread planificador.
 
-[ERROR] 20:20:40:644 Planificador/(2554:2554): Falló el bind
-[INFO] 20:20:40:644 Planificador/(2554:2554): Se conecta el proceso CPU -1
+[INFO] 19:37:03:212 Planificador/(8007:8007): Se conecta el proceso CPU 6
 
-[INFO] 20:20:40:644 Planificador/(2554:2554): FIFO
-[INFO] 20:20:40:650 Planificador/(2554:2557): Empieza el thread planificadorFIFO.
+[INFO] 19:37:03:213 Planificador/(8007:8007): Se conecta el proceso CPU 7
 
-[DEBUG] 20:20:40:650 Planificador/(2554:2557): Empieza el thread planificadorFIFO.
+[INFO] 19:37:03:213 Planificador/(8007:8007): Se conecta el proceso CPU 8
 
-[INFO] 20:20:52:262 Planificador/(2554:2555): Se genero el PCB del proceso 1.
-[ERROR] 20:37:45:215 Planificador/(2731:2731): Falló el bind
+[INFO] 19:37:03:213 Planificador/(8007:8007): RR
+[INFO] 19:37:03:223 Planificador/(8007:8244): Empieza el thread planificador.
+
+[ERROR] 20:20:47:930 Planificador/(9211:9211): Falló el bind
+[INFO] 20:20:47:930 Planificador/(9211:9211): Se conecta el proceso CPU -1
+
+[INFO] 20:20:47:931 Planificador/(9211:9211): RR
+[INFO] 20:20:47:934 Planificador/(9211:9220): Empieza el thread planificador.
+
+[ERROR] 20:21:00:304 Planificador/(9238:9238): Falló el bind
+[INFO] 20:21:00:304 Planificador/(9238:9238): Se conecta el proceso CPU -1
+
+[INFO] 20:21:00:305 Planificador/(9238:9238): RR
+[INFO] 20:21:00:322 Planificador/(9238:9247): Empieza el thread planificador.
+
+[ERROR] 20:21:09:196 Planificador/(9265:9265): Falló el bind
+[INFO] 20:21:09:196 Planificador/(9265:9265): Se conecta el proceso CPU -1
+
+[INFO] 20:21:09:197 Planificador/(9265:9265): RR
+[INFO] 20:21:09:214 Planificador/(9265:9274): Empieza el thread planificador.
+
+[ERROR] 20:24:58:320 Planificador/(9375:9375): Falló el bind
+[INFO] 20:24:58:320 Planificador/(9375:9375): Se conecta el proceso CPU -1
+
+[INFO] 20:24:58:321 Planificador/(9375:9375): RR
+[INFO] 20:24:58:335 Planificador/(9375:9384): Empieza el thread planificador.
+
+[ERROR] 20:29:50:972 Planificador/(9418:9418): Falló el bind
+[INFO] 20:29:50:972 Planificador/(9418:9418): Se conecta el proceso CPU -1
+
+[INFO] 20:29:50:996 Planificador/(9418:9418): RR
+[INFO] 20:29:51:15 Planificador/(9418:9453): Empieza el thread planificador.
+
+[ERROR] 20:33:55:335 Planificador/(9489:9489): Falló el bind
+[INFO] 20:34:16:688 Planificador/(9489:9489): Se conecta el proceso CPU -1
+
+[INFO] 20:35:01:421 Planificador/(9489:9489): RR
+[INFO] 20:35:04:730 Planificador/(9489:9555): Empieza el thread planificador.
+

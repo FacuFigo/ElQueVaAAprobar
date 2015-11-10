@@ -486,10 +486,10 @@ int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
 	switch(algoritmoDeReemplazo){
 	case FIFO:
 		while(i<dictionary_size(tablaDePaginas)){
-			process_t aux= dictionary_get(tablaDePaginas,string_itoa(i));
+			process_t* aux= dictionary_get(tablaDePaginas,string_itoa(i));
 			if(aux->bitPresencia==1)
-				if(aux.tiempoFIFO>tiempoMaximo){
-					tiempoMaximo=aux.tiempoFIFO;
+				if(aux->tiempoFIFO>tiempoMaximo){
+					tiempoMaximo=aux->tiempoFIFO;
 					paginaAReemplazar=i;
 				}
 			i++;

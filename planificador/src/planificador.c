@@ -122,6 +122,8 @@ void procesoCorriendo();
 
 int main(int argc, char** argv) {
 
+	system("rm log_Debug");
+
 	//Creo el archivo de logs
 	archivoLog = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 0, LOG_LEVEL_DEBUG);
@@ -151,13 +153,15 @@ int main(int argc, char** argv) {
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPUPadre = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
+	log_debug(archivoLogDebug, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
 
 	//Envio el quantum a CPU
-	char* paquete = malloc(sizeof(int));
-	if(string_equals_ignore_case(algoritmo, "FIFO"))
-		serializarInt(paquete, -1);
-	else
-		serializarInt(paquete, quantum);
+	//Envio el quantum a CPU
+	 	char* paquete = malloc(sizeof(int));
+	 if(string_equals_ignore_case(algoritmo, "FIFO"))
+	 	serializarInt(paquete, -1);
+	 else
+	 	serializarInt(paquete, quantum);
 	send(clienteCPUPadre, paquete, sizeof(int), 0);
 	free(paquete);
 
@@ -168,11 +172,12 @@ int main(int argc, char** argv) {
 
 	//Por cada una de las CPUs se hace un accept para conectarse y se hace el push a la cola de libres
 	int i;
-	for(i = 0; i <= *cantidadCPUs; i++){
+	for(i = 1; i <= *cantidadCPUs; i++){
 		struct sockaddr_storage direccionCliente;
 		unsigned int len = sizeof(direccionCliente);
 		clientesCPUs[i] = accept(listeningSocket, (void*) &direccionCliente, &len);
 		log_info(archivoLog, "Se conecta el proceso CPU %d\n", clientesCPUs[i]);
+		log_debug(archivoLogDebug, "Se conecta el proceso CPU %d\n", clientesCPUs[i]);
 
 		//El cliente CPU va a ser la posición i del array de clientes, entonces lo podria usar desde el array mismo
 		queue_push(queueCPULibre, &i);
@@ -254,6 +259,7 @@ void manejoDeConsola() {
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
+				log_debug(archivoLogDebug, "corriendo el %s", comando.parametro);
 			}
 			else{
 				//Cambio el pid string que viene como parametro por un int
@@ -263,7 +269,7 @@ void manejoDeConsola() {
 		} else {
 			if (string_equals_ignore_case(comando.comando, "ps"))
 				estadoProcesos();
-			else 
+			else
 				comandoCPU();
 		}
 
@@ -275,9 +281,14 @@ void manejoDeConsola() {
 
 void correrProceso(char* path) {
 
+	log_debug(archivoLogDebug,"entra a correr proceso");
 	pcb_t* pcbProc = malloc(sizeof(pcb_t));
+	log_debug(archivoLogDebug,"hace malloc");
 	generarPCB(pcbProc);
+	log_debug(archivoLogDebug,"generó pcb");
 	pcbProc->path = string_duplicate(path);
+	log_debug(archivoLogDebug,"entra a path");
+
 
 	//Agrego a la cola READY
 	pthread_mutex_lock(&mutexQueueReady);
@@ -288,6 +299,7 @@ void correrProceso(char* path) {
 
 void generarPCB(pcb_t* pcb){
 
+	log_debug(archivoLogDebug, "entra a generar pcb");
 	pcb->processID = pIDContador;
 	pcb->programCounter = 0;
 	//El estado se asigna a Ready
@@ -296,6 +308,7 @@ void generarPCB(pcb_t* pcb){
 	pIDContador++;
 	
 	log_info(archivoLog, "Se genero el PCB del proceso %i.", pcb->processID);
+	log_debug(archivoLogDebug, "Se genero el PCB del proceso %i.", pcb->processID);
 
 }
 
@@ -382,7 +395,7 @@ void comandoCPU(){
 
 void planificador() {
 	log_info(archivoLog, "Empieza el thread planificador.\n");
-	log_debug(archivoLog, "Empieza el thread planificador.\n");
+	log_debug(archivoLogDebug, "Empieza el thread planificador.\n");
 
 	int* cpu = malloc(sizeof(int));
 
@@ -395,7 +408,7 @@ void planificador() {
 			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_info(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
-			log_debug(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
+			log_debug(archivoLogDebug, "Proceso a Ejecutar: %i", pcb->processID);
 
 			pthread_mutex_lock(&mutexQueueCPULibre);
 			cpu = queue_pop(queueCPULibre);
@@ -413,11 +426,12 @@ void planificador() {
 			pthread_mutex_unlock(&mutexQueueRunning);
 
 			log_info(archivoLog, "Empieza la ejecución de proceso:%i", pcb->processID);
-			log_debug(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
+			log_debug(archivoLogDebug, "Empieza la ejecución de proceso: %i", pcb->processID);
 
 			procesoCorriendo_t* proceso = malloc(sizeof(procesoCorriendo_t));
 			proceso->pcb = pcb;
 			proceso->clienteCPU = clientesCPUs[*cpu];
+			log_debug(archivoLogDebug, "la pcb es: %i y el cpu: %i", proceso->pcb, proceso->clienteCPU);
 
 			//Comienza un thread para mantener el proceso corriendo y seguirlo
 			pthread_t threadProceso;
@@ -491,8 +505,13 @@ void entradaSalida(){
 
 void procesoCorriendo(procesoCorriendo_t* proceso){
 
-	pcb_t* pcb = proceso->pcb;
-	int cpu = proceso->clienteCPU;
+	log_debug(archivoLogDebug, "comienza el thread para seguir al proceso");
+	pcb_t* pcb = malloc(sizeof(pcb_t));
+	memcpy(pcb, proceso->pcb, sizeof(pcb_t));
+	int* cpu = (int*) proceso->clienteCPU;
+	memcpy(cpu, (int*) proceso->clienteCPU, sizeof(int));
+
+	log_debug(archivoLogDebug, "el pcb es: %s y el cpu es :%s", pcb, cpu);
 
 	//Envio el proceso que va a correr despues
 	int tamanioPaquete = sizeof(int) * 3 + strlen(pcb->path) + 1;
@@ -544,7 +563,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			recibirYDeserializarChar(&resultadoRafaga, cpu);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
@@ -566,7 +585,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			recibirYDeserializarChar(&resultadoRafaga, cpu);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
@@ -601,4 +620,6 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	}
 	pthread_mutex_unlock(&mutexQueueCPU);
 	pthread_mutex_unlock(&mutexQueueCPULibre);
+
+	free(pcb);
 }
