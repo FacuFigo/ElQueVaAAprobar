@@ -55,7 +55,6 @@ char* algoritmo;
 int quantum;
 int listeningSocket;
 int clienteCPUPadre;
-int* clientesCPUs;
 
 t_queue* queueReady;
 t_queue* queueRunning;
@@ -89,6 +88,11 @@ typedef struct {
 	char* path;
 } pcb_t;
 
+typedef struct{
+	int numeroCPU;
+	int cliente;
+} cpu_t;
+
 typedef struct {
 	pcb_t* pcb;
 	int tiempoDormido;
@@ -96,7 +100,7 @@ typedef struct {
 
 typedef struct {
 	pcb_t* pcb;
-	int clienteCPU;
+	cpu_t* clienteCPU;
 } procesoCorriendo_t;
 
 //Funciones de configuracion
@@ -106,6 +110,7 @@ int configurarSocketServidor();
 //Funciones de gestion
 void manejoDeConsola();
 void planificador();
+void esperarConexiones();
 
 //Funciones de comandos
 void correrProceso(char* path);
@@ -118,7 +123,7 @@ void comandoCPU();
 int buscarYEliminarEnCola(t_queue* cola, int pid);
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
 void entradaSalida();
-void procesoCorriendo();
+void procesoCorriendo(procesoCorriendo_t* proceso);
 
 int main(int argc, char** argv) {
 
@@ -145,45 +150,7 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexQueueBlocked, NULL);
 	pthread_mutex_init(&mutexCliente, NULL);
 
-	//Configuracion del Servidor
-	configurarSocketServidor();
-
-	//En primera instancia se conecta el proceso CPU y manda la cantidad de CPUs que va a tener corriendo
-	struct sockaddr_storage direccionCliente;
-	unsigned int len = sizeof(direccionCliente);
-	clienteCPUPadre = accept(listeningSocket, (void*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
-	log_debug(archivoLogDebug, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
-
-	//Envio el quantum a CPU
-	//Envio el quantum a CPU
-	 	char* paquete = malloc(sizeof(int));
-	 if(string_equals_ignore_case(algoritmo, "FIFO"))
-	 	serializarInt(paquete, -1);
-	 else
-	 	serializarInt(paquete, quantum);
-	send(clienteCPUPadre, paquete, sizeof(int), 0);
-	free(paquete);
-
-	int* cantidadCPUs = malloc(sizeof(int));
-	recibirYDeserializarInt(cantidadCPUs, clienteCPUPadre);
-
-	clientesCPUs = malloc((*cantidadCPUs) * sizeof(int));
-
-	//Por cada una de las CPUs se hace un accept para conectarse y se hace el push a la cola de libres
-	int i;
-	for(i = 1; i <= *cantidadCPUs; i++){
-		struct sockaddr_storage direccionCliente;
-		unsigned int len = sizeof(direccionCliente);
-		clientesCPUs[i] = accept(listeningSocket, (void*) &direccionCliente, &len);
-		log_info(archivoLog, "Se conecta el proceso CPU %d\n", clientesCPUs[i]);
-		log_debug(archivoLogDebug, "Se conecta el proceso CPU %d\n", clientesCPUs[i]);
-
-		//El cliente CPU va a ser la posición i del array de clientes, entonces lo podria usar desde el array mismo
-		queue_push(queueCPULibre, &i);
-	}
-
-	free(cantidadCPUs);
+	esperarConexiones();
 
 	//Comienza el thread de la consola
 	pthread_t hiloConsola;
@@ -259,7 +226,6 @@ void manejoDeConsola() {
 		if (comando.parametro != NULL){
 			if (string_equals_ignore_case(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
-				log_debug(archivoLogDebug, "corriendo el %s", comando.parametro);
 			}
 			else{
 				//Cambio el pid string que viene como parametro por un int
@@ -269,7 +235,7 @@ void manejoDeConsola() {
 		} else {
 			if (string_equals_ignore_case(comando.comando, "ps"))
 				estadoProcesos();
-			else
+			else 
 				comandoCPU();
 		}
 
@@ -281,34 +247,26 @@ void manejoDeConsola() {
 
 void correrProceso(char* path) {
 
-	log_debug(archivoLogDebug,"entra a correr proceso");
-	pcb_t* pcbProc = malloc(sizeof(pcb_t));
-	log_debug(archivoLogDebug,"hace malloc");
-	generarPCB(pcbProc);
-	log_debug(archivoLogDebug,"generó pcb");
-	pcbProc->path = string_duplicate(path);
-	log_debug(archivoLogDebug,"entra a path");
-
+	pcb_t* pcb = malloc(sizeof(pcb_t));
+	generarPCB(pcb);
+	pcb->path = string_duplicate(path);
 
 	//Agrego a la cola READY
 	pthread_mutex_lock(&mutexQueueReady);
-	queue_push(queueReady, pcbProc);
+	queue_push(queueReady, pcb);
 	pthread_mutex_unlock(&mutexQueueReady);
 
+	log_debug(archivoLogDebug, "Se genero el PCB del proceso %i.", pcb->processID);
 }
 
 void generarPCB(pcb_t* pcb){
 
-	log_debug(archivoLogDebug, "entra a generar pcb");
 	pcb->processID = pIDContador;
 	pcb->programCounter = 0;
 	//El estado se asigna a Ready
 	pcb->estadoProceso = 0;
 
 	pIDContador++;
-	
-	log_info(archivoLog, "Se genero el PCB del proceso %i.", pcb->processID);
-	log_debug(archivoLogDebug, "Se genero el PCB del proceso %i.", pcb->processID);
 
 }
 
@@ -395,16 +353,17 @@ void comandoCPU(){
 
 void planificador() {
 	log_info(archivoLog, "Empieza el thread planificador.\n");
-	log_debug(archivoLogDebug, "Empieza el thread planificador.\n");
+	log_debug(archivoLog, "Empieza el thread planificador.\n");
 
-	int* cpu = malloc(sizeof(int));
+	cpu_t* cpu = malloc(sizeof(cpu_t));
+	pcb_t* pcb = malloc(sizeof(pcb_t));
 
 	while(1){
 
 		if (! (queue_is_empty(queueCPULibre) || queue_is_empty(queueReady))){
 
 			pthread_mutex_lock(&mutexQueueReady);
-			pcb_t* pcb = queue_pop(queueReady);
+			pcb = queue_pop(queueReady);
 			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_info(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
@@ -425,21 +384,21 @@ void planificador() {
 			queue_push(queueRunning, pcb);
 			pthread_mutex_unlock(&mutexQueueRunning);
 
-			log_info(archivoLog, "Empieza la ejecución de proceso:%i", pcb->processID);
-			log_debug(archivoLogDebug, "Empieza la ejecución de proceso: %i", pcb->processID);
+			log_debug(archivoLogDebug, "Proceso ejecuta en CPU N°: %i", cpu->numeroCPU);
 
 			procesoCorriendo_t* proceso = malloc(sizeof(procesoCorriendo_t));
 			proceso->pcb = pcb;
-			proceso->clienteCPU = clientesCPUs[*cpu];
-			log_debug(archivoLogDebug, "la pcb es: %i y el cpu: %i", proceso->pcb, proceso->clienteCPU);
+			proceso->clienteCPU = cpu;
+
+			log_debug(archivoLogDebug, "Struct proceso: pcb = %i, CPU: %i", proceso->pcb->processID, proceso->clienteCPU->cliente);
 
 			//Comienza un thread para mantener el proceso corriendo y seguirlo
 			pthread_t threadProceso;
-			pthread_create(&threadProceso, NULL, (void *) procesoCorriendo, &procesoCorriendo);
-
-			free(proceso);
+			pthread_create(&threadProceso, NULL, (void *) procesoCorriendo, proceso);
 		}
 	}
+	free(pcb);
+	free(cpu);
 }
 
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
@@ -486,6 +445,8 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 void entradaSalida(){
 	procesoBlocked_t* proceso;
 
+	log_debug(archivoLogDebug, "Empieza el hilo de Entrada/Salida.");
+
 	while(1){
 
 		if(!queue_is_empty(queueBlocked)){
@@ -505,36 +466,33 @@ void entradaSalida(){
 
 void procesoCorriendo(procesoCorriendo_t* proceso){
 
-	log_debug(archivoLogDebug, "comienza el thread para seguir al proceso");
-	pcb_t* pcb = malloc(sizeof(pcb_t));
-	memcpy(pcb, proceso->pcb, sizeof(pcb_t));
-	int* cpu = (int*) proceso->clienteCPU;
-	memcpy(cpu, (int*) proceso->clienteCPU, sizeof(int));
+	pcb_t* pcb =  proceso->pcb;
+	cpu_t* cpu =  proceso->clienteCPU;
 
-	log_debug(archivoLogDebug, "el pcb es: %s y el cpu es :%s", pcb, cpu);
+	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo.");
 
 	//Envio el proceso que va a correr despues
-	int tamanioPaquete = sizeof(int) * 3 + strlen(pcb->path) + 1;
+	int tamanioPaquete = sizeof(int) * 4 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
 
-	send(cpu, paquete, tamanioPaquete, 0);
+	send(cpu->cliente, paquete, tamanioPaquete, 0);
 
 	free(paquete);
 	
 	int* formaFinalizacion = malloc(sizeof(int));
-	recibirYDeserializarInt(formaFinalizacion, cpu);
+	recibirYDeserializarInt(formaFinalizacion, cpu->cliente);
 
 	switch(*formaFinalizacion){
 
 		case RAFAGAPROCESO:{
 
 			int programCounter;
-			recibirYDeserializarInt(&programCounter, cpu);
+			recibirYDeserializarInt(&programCounter, cpu->cliente);
 
 			char* resultadoRafaga;
-			recibirYDeserializarChar(&resultadoRafaga, cpu);
+			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
@@ -554,16 +512,16 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		case PROCESOBLOQUEADO:{
 
 			int programCounter;
-			recibirYDeserializarInt(&programCounter, cpu);
+			recibirYDeserializarInt(&programCounter, cpu->cliente);
 
 			int tiempoBloqueado;
-			recibirYDeserializarInt(&tiempoBloqueado, cpu);
+			recibirYDeserializarInt(&tiempoBloqueado, cpu->cliente);
 
 			char* resultadoRafaga;
-			recibirYDeserializarChar(&resultadoRafaga, cpu);
+			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
@@ -582,10 +540,10 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		case FINALIZAPROCESO:{
 
 			char* resultadoRafaga;
-			recibirYDeserializarChar(&resultadoRafaga, cpu);
+			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
@@ -602,24 +560,65 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 	pthread_mutex_lock(&mutexQueueCPULibre);
 	pthread_mutex_lock(&mutexQueueCPU);
-	int* cpuAux;
-	t_queue queueAux;
+	cpu_t* cpuAux;
+	t_queue* queueAux;
 
 	while(!queue_is_empty(queueCPU)){
 		cpuAux = queue_pop(queueCPU);
-		if(*cpuAux == proceso->clienteCPU){
+		if(cpuAux->numeroCPU == proceso->clienteCPU->numeroCPU){
 			queue_push(queueCPULibre, &proceso->clienteCPU);
 		}else{
-			queue_push(&queueAux, &cpuAux);
+			queue_push(queueAux, cpuAux);
 		}
 	}
 
-	while(!queue_is_empty(&queueAux)){
-		cpuAux = queue_pop(&queueAux);
+	while(!queue_is_empty(queueAux)){
+		cpuAux = queue_pop(queueAux);
 		queue_push(queueCPU, cpuAux);
 	}
 	pthread_mutex_unlock(&mutexQueueCPU);
 	pthread_mutex_unlock(&mutexQueueCPULibre);
 
-	free(pcb);
+	free(proceso);
+}
+
+void esperarConexiones(){
+	int cantidadCPUs;
+
+	//Configuracion del Servidor
+	configurarSocketServidor();
+
+	//En primera instancia se conecta el proceso CPU y manda la cantidad de CPUs que va a tener corriendo
+	struct sockaddr_storage direccionCliente;
+	unsigned int len = sizeof(direccionCliente);
+	clienteCPUPadre = accept(listeningSocket, (void*) &direccionCliente, &len);
+	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
+
+	//Envio el quantum a CPU
+	char* paquete = malloc(sizeof(int));
+	if(string_equals_ignore_case(algoritmo, "FIFO"))
+		serializarInt(paquete, -1);
+	else
+		serializarInt(paquete, quantum);
+	send(clienteCPUPadre, paquete, sizeof(int), 0);
+	free(paquete);
+
+	recibirYDeserializarInt(&cantidadCPUs, clienteCPUPadre);
+	log_debug(archivoLogDebug, "Cantidad de CPUs: %i.", cantidadCPUs);
+
+	//Por cada una de las CPUs se hace un accept para conectarse y se hace el push a la cola de libres
+	int i;
+	for(i = 1; i <= cantidadCPUs; i++){
+		cpu_t* cpu = malloc(sizeof(cpu_t));
+
+		struct sockaddr_storage direccionCliente;
+		unsigned int len = sizeof(direccionCliente);
+		cpu->cliente = accept(listeningSocket, (void*) &direccionCliente, &len);
+		cpu->numeroCPU = i;
+		log_debug(archivoLogDebug, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
+
+		//El cliente CPU va a ser la posición i del array de clientes, entonces lo podria usar desde el array mismo
+		queue_push(queueCPULibre, cpu);
+	}
+
 }
