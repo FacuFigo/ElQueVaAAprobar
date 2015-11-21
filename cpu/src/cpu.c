@@ -221,8 +221,9 @@ void ejecutarmProc() {
 	while(1){
 		quantumRafaga = quantum;
 		entradaSalida=0;
-		operacion = RAFAGAPROCESO;
 		char* resultadosTot = string_new();
+		recibirYDeserializarInt(&operacion, socketPlanificador);
+		log_info(archivoLog, "Recibi operacion %i.\n", operacion);
 		recibirYDeserializarInt(&pID, socketPlanificador);
 		log_info(archivoLog, "Recibi pid %i.\n", pID);
 		recibirYDeserializarInt(&programCounter, socketPlanificador);
