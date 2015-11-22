@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
 	archivoLog = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
-	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 0, LOG_LEVEL_DEBUG);
+	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
 
@@ -483,6 +483,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	
 	int* formaFinalizacion = malloc(sizeof(int));
 	recibirYDeserializarInt(formaFinalizacion, cpu->cliente);
+	log_debug(archivoLogDebug,"forma de finalizacion:%i",formaFinalizacion);
 
 	switch(*formaFinalizacion){
 
@@ -494,7 +495,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
-			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 

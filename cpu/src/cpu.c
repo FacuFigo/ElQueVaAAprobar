@@ -208,7 +208,8 @@ void ejecutarmProc() {
 	operacion_t operacion;
 	int entradaSalida;
 	int quantumRafaga;
-
+	int valor;
+	quantumRafaga = quantum;
 
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 				&socketPlanificador))
@@ -219,7 +220,6 @@ void ejecutarmProc() {
 					ipPlanificador);
 
 	while(1){
-		quantumRafaga = quantum;
 		entradaSalida=0;
 		char* resultadosTot = string_new();
 		recibirYDeserializarInt(&operacion, socketPlanificador);
@@ -236,15 +236,16 @@ void ejecutarmProc() {
 
 
 		fgets(comandoLeido, 30, mCod);
+		log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
 		char** leidoSplit = string_split(comandoLeido, " ");
 		instruccion = leidoSplit[0];
-
+		valor = strtol(leidoSplit[1], NULL, 10);
 
 		while (!feof(mCod)&&!entradaSalida) {
 			programCounter++;
 			if (string_equals_ignore_case(instruccion, "iniciar")) {
-				int cantPaginas= strtol(leidoSplit[1], NULL, 10);
+				int cantPaginas=valor;
 				iniciarmProc(pID, cantPaginas);
 				int verificador;
 				recibirYDeserializarInt(&verificador, socketMemoria);
@@ -263,8 +264,9 @@ void ejecutarmProc() {
 			}
 
 			if (string_equals_ignore_case(instruccion, "leer")) {
-				int nroPagina=strtol(leidoSplit[1], NULL, 10);
+				int nroPagina=valor;
 				leermProc(pID, nroPagina);
+				log_info(archivoLog, "NUMERO DE PAGINA A LEER: %d", nroPagina);
 				int verificador;
 				recibirYDeserializarInt(&verificador, socketMemoria);
 				if (verificador != -1) {
@@ -280,7 +282,7 @@ void ejecutarmProc() {
 				}
 			}
 			if (string_equals_ignore_case(instruccion, "escribir")) {
-				int nroPagina=strtol(leidoSplit[1], NULL, 10);
+				int nroPagina=valor;
 				char* texto=malloc(30);
 	//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
 				escribirmProc(pID, nroPagina, texto);
@@ -298,7 +300,7 @@ void ejecutarmProc() {
 
 			}
 			if (string_equals_ignore_case(instruccion, "entrada-salida")) {
-				tiempoIO= strtol(leidoSplit[1], NULL, 10);
+				tiempoIO= valor;
 				entradaSalidamProc(pID, tiempoIO);
 				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
@@ -322,15 +324,19 @@ void ejecutarmProc() {
 				operacion = FINALIZARPROCESO;
 			}
 
-			sleep(retardo);
-			fgets(comandoLeido, 30, mCod);
-
 			if (quantum != -1) {
 				quantumRafaga--;
 				if (quantumRafaga == 0) {
 					break;
 				}
 			}
+
+			sleep(retardo);
+			fgets(comandoLeido, 30, mCod);
+			char** leidoSplit = string_split(comandoLeido, " ");
+			instruccion = leidoSplit[0];
+			valor = strtol(leidoSplit[1], NULL, 10);
+			log_info(archivoLog,"SEGUNDO comando leido: %s", comandoLeido);
 
 		}//fin del super while
 
