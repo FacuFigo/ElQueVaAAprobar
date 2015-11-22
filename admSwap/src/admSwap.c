@@ -69,15 +69,16 @@ char* nombreSwap;
 int cantidadPaginas;
 int listeningSocket;
 int tamanioPagina;
-unsigned retardoCompactacion; //son segundos sino lo cambio a int
+int retardoCompactacion;
 int clienteMemoria;
+
+int fragmentacionExt;
 
 t_list* listaGestionEspacios;
 
-pthread_mutex_t mutexProcedimiento;
-pthread_mutex_t mutexProceso;
-
 FILE* archivoSwap;
+
+pthread_mutex_t accesoAMemoria;
 
 //Funciones de configuración
 void configurarAdmSwap(char* config);
@@ -89,9 +90,10 @@ int buscarEspacioDisponible(int espacioNecesario);
 void asignarEspacio(int paginaInicio, process_t* proceso);
 int liberarMemoria(int pid);
 void liberarEspacioEnArchivo(int numeroDePagina);
-void escribirLeer();
 int leerPagina(int pid, int numeroPagina, char* contenidoLeido);
 int escribirPagina(int pid, int paginaAEscribir, char* contenido);
+
+void compactador();
 
 int main(int argc, char** argv) {
 
@@ -100,6 +102,8 @@ int main(int argc, char** argv) {
 	log_info(archivoLog, "Archivo de logs creado.\n");
 
 	logDebug = log_create("log_Debug_Swap", "SWAP", 0, LOG_LEVEL_DEBUG);
+
+	pthread_mutex_init(&accesoAMemoria, NULL);
 
 	configurarAdmSwap(argv[1]);
 
@@ -154,19 +158,11 @@ int main(int argc, char** argv) {
 		free(pagina);
 	}
 
-	pthread_mutex_init(&mutexProcedimiento, NULL);
-	pthread_mutex_init(&mutexProceso, NULL);
-
 	//Thread que gestiona los espacios en la lista de gestion
 	pthread_t admDeEspacio;
 	pthread_create(&admDeEspacio, NULL, (void *) admDeEspacios, NULL);
 
-/*
-	pthread_t escribirLeerPaginas;
-	pthread_create(&escribirLeerPaginas, NULL, (void *) escribirLeer, NULL);
-*/
 	pthread_join(admDeEspacio, NULL);
-	//pthread_join(escribirLeerPaginas, NULL);
 
 	list_destroy(listaGestionEspacios);
 	fclose(archivoSwap);
@@ -229,6 +225,9 @@ void admDeEspacios(){
 		process_t* proceso = malloc(sizeof(process_t));
 		recibirYDeserializarInt(&operacion, clienteMemoria);
 		log_info(archivoLog, "Recibi Operacion");
+
+		pthread_mutex_lock(&accesoAMemoria);
+
 		switch(operacion){
 			case INICIARPROCESO:{
 
@@ -250,10 +249,25 @@ void admDeEspacios(){
 					//No hay espacio disponible
 					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
 
-					serializarInt(paquete, -1);
-					send(clienteMemoria, paquete, tamanioPaquete, 0);
+					if(fragmentacionExt >= proceso->cantidadDePaginas){
+						pthread_t compactador;
+						pthread_create(&compactador, NULL, (void *) compactador, NULL);
 
-					free(paquete);
+						pthread_mutex_unlock(&accesoAMemoria);
+
+						log_info(archivoLog, "Inicia el hilo compactador.");
+
+						serializarInt(paquete, 1);
+						send(clienteMemoria, paquete, tamanioPaquete, 0);
+
+						free(paquete);
+					}else{
+
+						serializarInt(paquete, -1);
+						send(clienteMemoria, paquete, tamanioPaquete, 0);
+
+						free(paquete);
+					}
 				} else{
 					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
 					asignarEspacio(paginaInicio, proceso);
@@ -264,7 +278,7 @@ void admDeEspacios(){
 
 					free(paquete);
 				}
-				log_info(archivoLog, "Termino inicializar");
+
 				break;
 			}
 
@@ -353,6 +367,7 @@ void admDeEspacios(){
 //Si encontro el espacio, devuelve el byte en donde comienza el espacio, sino devuelve -1
 int buscarEspacioDisponible(int paginasNecesarias){
 
+	fragmentacionExt = 0;
 	int paginaInicio = 0;
 	int paginasEncontradas = 0;
 	int numeroPagina = 0;
@@ -376,6 +391,7 @@ int buscarEspacioDisponible(int paginasNecesarias){
 			break;
 		}else{
 			numeroPagina++;
+			fragmentacionExt++;
 			pagina = list_get(listaGestionEspacios, numeroPagina);
 		}
 	}
@@ -440,11 +456,6 @@ void liberarEspacioEnArchivo(int numeroDePagina){
 	for(numeroByte = 0; numeroByte <= tamanioPagina; numeroByte++){
 		fputc('\0', archivoSwap);
 	}
-
-}
-
-//TODO Thread para realizar la escritura y lectura de memoria
-void escribirLeer(){
 
 }
 
@@ -523,4 +534,11 @@ int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 	}
 
 	return -1;
+}
+
+void compactador(){
+
+	pthread_mutex_lock(&accesoAMemoria);
+
+	pthread_mutex_unlock(&accesoAMemoria);
 }
