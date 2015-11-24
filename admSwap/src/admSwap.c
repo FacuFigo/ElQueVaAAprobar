@@ -97,11 +97,11 @@ void compactador();
 
 int main(int argc, char** argv) {
 
-	//Creo los archivos de logs
-	archivoLog = log_create("log_SWAP", "SWAP", 1, LOG_LEVEL_INFO);
-	log_info(archivoLog, "Archivo de logs creado.\n");
+	system("rm log_Debug_Swap");
 
-	logDebug = log_create("log_Debug_Swap", "SWAP", 0, LOG_LEVEL_DEBUG);
+	//Creo los archivos de logs
+	archivoLog = log_create("log_SWAP", "SWAP", 0, LOG_LEVEL_INFO);
+	logDebug = log_create("log_Debug_Swap", "SWAP", 1, LOG_LEVEL_DEBUG);
 
 	pthread_mutex_init(&accesoAMemoria, NULL);
 
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteMemoria = accept(listeningSocket, (void*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso Memoria %i. \n", clienteMemoria);
+	log_info(logDebug, "Se conecta el proceso Memoria %i. \n", clienteMemoria);
 
 	//Creo el archivo de Swap
 	int tamanioArchivoSwap = cantidadPaginas * tamanioPagina;
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
 		pagina->proceso = -1;
 		list_add(listaGestionEspacios, pagina);
 		//Para saber si se está creando de forma correcta
-		log_debug(logDebug, "N° pagina: %i, Disponibilidad: %i, Proceso: %i", pagina->numeroPagina, pagina->disponibilidad, pagina->proceso);
+		//log_debug(logDebug, "N° pagina: %i, Disponibilidad: %i, Proceso: %i", pagina->numeroPagina, pagina->disponibilidad, pagina->proceso);
 		free(pagina);
 	}
 
@@ -218,13 +218,13 @@ void admDeEspacios(){
 	int paginaInicio = 0;
 	int operacion, tamanioPaquete;
 
-	log_info(archivoLog, "Comienza el hilo Administrador de Espacios.\n");
+	log_info(logDebug, "Comienza el Administrador de Espacios.");
 
 	while(1){
 
 		process_t* proceso = malloc(sizeof(process_t));
 		recibirYDeserializarInt(&operacion, clienteMemoria);
-		log_info(archivoLog, "Recibi Operacion");
+		log_debug(logDebug, "Recibi Operacion: %i.", operacion);
 
 		pthread_mutex_lock(&accesoAMemoria);
 
@@ -235,19 +235,19 @@ void admDeEspacios(){
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 				recibirYDeserializarInt(&proceso->cantidadDePaginas, clienteMemoria);
 
-				log_info(archivoLog, "Recibi pid %i.\n", proceso->processID);
-				log_info(archivoLog, "Recibi cantidad de paginas %i.\n", proceso->cantidadDePaginas);
+				log_debug(logDebug, "Recibi pid %i.", proceso->processID);
+				log_debug(logDebug, "Recibi cantidad de paginas %i.", proceso->cantidadDePaginas);
 
 				paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
 
-				log_info(archivoLog, "Pagina de inicio %i.\n", paginaInicio);
+				log_debug(logDebug, "Pagina de inicio %i.", paginaInicio);
 
 				tamanioPaquete = sizeof(int);
 				char* paquete = malloc(tamanioPaquete);
 
 				if(paginaInicio == -1){
 					//No hay espacio disponible
-					log_info(archivoLog, "No hay paginas disponibles para el proceso %i.\n", proceso->processID);
+					log_debug(logDebug, "No hay paginas disponibles para el proceso %i.", proceso->processID);
 
 					if(fragmentacionExt >= proceso->cantidadDePaginas){
 						pthread_t compactador;
@@ -255,7 +255,7 @@ void admDeEspacios(){
 
 						pthread_mutex_unlock(&accesoAMemoria);
 
-						log_info(archivoLog, "Inicia el hilo compactador.");
+						log_debug(logDebug, "Inicia el hilo compactador.");
 
 						serializarInt(paquete, 1);
 						send(clienteMemoria, paquete, tamanioPaquete, 0);
@@ -271,7 +271,7 @@ void admDeEspacios(){
 				} else{
 					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
 					asignarEspacio(paginaInicio, proceso);
-					log_info(archivoLog, "Se le asignaron las paginas al proceso %i.\n", proceso->processID);
+					log_debug(logDebug, "Se le asignaron las paginas al proceso %i.", proceso->processID);
 
 					serializarInt(paquete, 1);
 					send(clienteMemoria, paquete, tamanioPaquete, 0);
@@ -289,13 +289,14 @@ void admDeEspacios(){
 				char* paquete = malloc(sizeof(int));
 
 				if(liberarMemoria(proceso->processID) == -1){
-					log_error(archivoLog, "No se pudo finalizar el proceso %i.\n", proceso->processID);
+					log_debug(logDebug, "No se pudo finalizar el proceso %i.", proceso->processID);
 
 					serializarInt(paquete, -1);
 					send(clienteMemoria, paquete, sizeof(int), 0);
 
 					free(paquete);
 				}else{
+					log_debug(logDebug, "Finalizo de forma correcta el proceso %i.", proceso->processID);
 					//Enviar confirmacion
 					serializarInt(paquete, 1);
 					send(clienteMemoria, paquete, sizeof(int), 0);
@@ -313,21 +314,35 @@ void admDeEspacios(){
 				int* paginaALeer = malloc(sizeof(int));
 				recibirYDeserializarInt(paginaALeer, clienteMemoria);
 
+				log_debug(logDebug, "Comienza la lectura de la pagina %i del proceso %i.", *paginaALeer, *pid);
+
 				char* contenidoPagina = malloc(tamanioPagina);
 				int resultado = leerPagina(*pid, *paginaALeer, contenidoPagina);
 
-				log_info(archivoLog, "Termino de leer pagina %d",*paginaALeer);
-				//Enviar contenidoPagina a Memoria
 				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
 				char* paquete = malloc(tamanioPaquete);
 
-				serializarChar(serializarInt(serializarInt(paquete, operacion), resultado), contenidoPagina);
+				if(resultado == 1){
+					log_debug(logDebug, "Termino de leer pagina %i del proceso %i.",*paginaALeer, *pid);
+					//Enviar contenidoPagina a Memoria
+					serializarChar(serializarInt(paquete, resultado), contenidoPagina);
 
-				send(clienteMemoria, paquete, tamanioPaquete, 0);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
 
-				free(paginaALeer);
-				free(contenidoPagina);
-				free(paquete);
+					free(paginaALeer);
+					free(contenidoPagina);
+					free(paquete);
+				}else{
+					//No se pudo leer la pagina
+					log_debug(logDebug, "No se pudo leer la pagina %i del proceso %i.", *paginaALeer, *pid);
+
+					serializarInt(paquete, resultado);
+					send(clienteMemoria, paquete, tamanioPaquete, 0);
+
+					free(paginaALeer);
+					free(contenidoPagina);
+					free(paquete);
+				}
 
 				break;
 			}
@@ -343,13 +358,20 @@ void admDeEspacios(){
 				char* contenido;
 				recibirYDeserializarChar(&contenido, clienteMemoria);
 
+				log_debug(logDebug, "Comienza la escritura de la pagina %i del proceso %i.", *paginaAEscribir, *pid);
+
 				int resultado = escribirPagina(*pid, *paginaAEscribir, contenido);
 
+				if(resultado == -1)
+					log_debug(logDebug,"No se pudo escribir la pagina %i del proceso %i.", *paginaAEscribir, *pid);
+				else
+					log_debug(logDebug, "Se logro escribir la pagina %i del proceso &i.", *paginaAEscribir, *pid);
+
 				//Enviar confirmacion y contenido a Memoria
-				tamanioPaquete = sizeof(int) * 2;
+				tamanioPaquete = sizeof(int);
 				char* paquete = malloc(tamanioPaquete);
 
-				serializarInt(serializarInt(paquete, operacion), resultado);
+				serializarInt(paquete, resultado);
 
 				send(clienteMemoria, paquete, tamanioPaquete, 0);
 
@@ -539,6 +561,40 @@ int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 void compactador(){
 
 	pthread_mutex_lock(&accesoAMemoria);
+
+	log_debug(logDebug,"CO-CO-CO-COMPACTATION!!");
+	log_debug(logDebug, "Tamaño de fragmentacón: %i", fragmentacionExt);
+
+	pagina_t* pagina;
+	int numeroPagina = 0;
+	int comienzoEspacioVacio = 0; //Pagina en la que inicia
+	int tamanioEspacioVacio = 0;  //Tamaño del espacio en paginas
+	int paginaAAsignar = 0; //Pagina a la que se va a asignar el proceso
+
+	//TODO Sacar los espacios vacios
+	//Despues de encontrar el primer espacio vacio, ubicar el siguiente proceso que se encuentra luego de este espacio
+
+	pagina = list_get(listaGestionEspacios, numeroPagina);
+	while(pagina->disponibilidad == 0){
+		pagina = list_get(listaGestionEspacios, numeroPagina);
+		numeroPagina++;
+	}
+	//Asigno la pagina inicial
+	comienzoEspacioVacio = pagina->numeroPagina;
+
+	//Leo la proxima pagina
+	numeroPagina++;
+	pagina = list_get(listaGestionEspacios, numeroPagina);
+	//Recorro la lista para saber el tamaño del espacio vacio
+	while(pagina->disponibilidad == 1){
+		pagina = list_get(listaGestionEspacios, numeroPagina);
+		numeroPagina++;
+		tamanioEspacioVacio++;
+	}
+
+	//TODO Recorrer de nuevo la lista hasta que se encuentre otro blanco, pagina que se encuentre, pagina que se mueve al primer lugar blanco que se paso
+
+	//TODO Hacer los movimientos dentro del archivo
 
 	pthread_mutex_unlock(&accesoAMemoria);
 }
