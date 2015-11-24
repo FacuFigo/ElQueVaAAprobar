@@ -276,9 +276,13 @@ void admDeMemoria(){
 			case ESCRIBIRMEMORIA:{
 				int pid, pagina, tamanioPaquete, verificador;
 				char *paquete, *contenido;
+				log_info(archivoLog, "Empieza escribir memoria.");
 				recibirYDeserializarInt(&pid, clienteCPU);
+				log_info(archivoLog, "Recibí pid: %i",pid);
 				recibirYDeserializarInt(&pagina, clienteCPU);
+				log_info(archivoLog, "Página página: %i",pagina);
 				recibirYDeserializarChar(&contenido,clienteCPU);
+				log_info(archivoLog, "Página contenido: %s",contenido);
 				verificador=escribirMemoria(pid,pagina,contenido);
 				if (verificador != -1){
 					log_info(archivoLog, "Página %d escrita: %s",pagina,contenido);
@@ -407,11 +411,15 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	int success=1;
 	void *paginaAEscribir = calloc(tamanioMarco,4);
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
-	process_t *process = dictionary_remove(tablaDePaginas, string_itoa(pagina));
+	process_t *process = dictionary_get(tablaDePaginas, string_itoa(pagina));
+	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",process->nroMarco);
 	if (process->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
+			log_info(archivoLog,"Antes de asignar un marco nuevo\n");
 			process->nroMarco = asignarNuevoMarco();
+			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",process->nroMarco);
 		}else{//reemplaza un marco
+			log_info(archivoLog,"Empieza el algoritmo de reemplazo\n");
 			int paginaAReemplazar = paginaAReemplazarPorAlgoritmo(tablaDePaginas);
 			process_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
 			process->nroMarco=victima->nroMarco;
@@ -427,15 +435,17 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}
+	log_info(archivoLog,"Antes del memcpy en memoria principal.\n");
 	memcpy(paginaAEscribir,contenido,strlen((char*)contenido));//tamanioContenido
 	memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,paginaAEscribir,tamanioMarco);
+	log_info(archivoLog,"Despues del memcpy en memoria principal\n");
 	process->bitModificado=1;
 	process->bitPresencia=1;
 	process->tiempoLRU=1;
 	process->tiempoFIFO=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
-	dictionary_put(tablaDePaginas,string_itoa(pagina),process);
+	//dictionary_put(tablaDePaginas,string_itoa(pagina),process); ahora es innecesario
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
 	return success;// debería devolver -1 en error
 }
@@ -447,7 +457,7 @@ int asignarNuevoMarco(){//first fit
 	while(i<cantidadMarcos&&!encontrado){
 		if (marcos[i]==0){
 			marcos[i]=1;
-			nuevoMarco = marcos[i];
+			nuevoMarco = i;
 			encontrado =1;
 		}
 		i++;
@@ -458,12 +468,16 @@ int asignarNuevoMarco(){//first fit
 int cantidadMarcosAsignados(t_dictionary *tablaDePaginas){
 	int cantidad=0;
 	int i=0;
+	log_info(archivoLog,"Empieza cantidadMarcosAsignados\n");
 	while(i<dictionary_size(tablaDePaginas) && cantidad<maximoMarcosPorProceso){
+
 		process_t *aux = dictionary_get(tablaDePaginas,string_itoa(i));
+		log_info(archivoLog,"Lee pagina %i con bit de presencia: %i\n",i,aux->bitPresencia);
 		if(aux->bitPresencia==1)
 			cantidad++;
 		i++;
 	}
+	log_info(archivoLog,"Termina cantidadMarcosAsignados %i\n",cantidad);
 	return cantidad;
 }
 
