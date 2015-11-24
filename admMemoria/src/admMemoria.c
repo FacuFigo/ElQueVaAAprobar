@@ -88,14 +88,19 @@ int configurarSocketServidor();
 void admDeMemoria();
 void iniciarProceso(int pid, int cantPaginas);
 int finalizarProceso(int pid);
-void* leerMemoria(int pid, int pagina);
+int leerMemoria(int pid, int pagina, void** contenido);
 int escribirMemoria(int pid,int pagina, void* contenido);
 int asignarNuevoMarco();
 int cantidadMarcosAsignados(t_dictionary *tablaDePaginas);
 void actualizarTiempoLRU(char* key, process_t* value);
 void actualizarTiempoFIFO(char* key, process_t* value);
+void tablaDePaginasDestroy(t_dictionary *tablaDePaginas);
+void paginaDestroy(process_t *pagina);
+void desasignarMarcos(char *key, process_t* value);
 int escribirEnSwap(char *contenido,int pid, int pagina);
+int leerDeSwap(int pid, int pagina,void** contenido);
 int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas);
+
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -191,152 +196,147 @@ int configurarSocketServidor() {
 }
 
 void admDeMemoria(){
-	int i;
-	memoriaPrincipal = malloc (cantidadMarcos*tamanioMarco);
+	int i,continuar=1;
+	memoriaPrincipal = calloc (cantidadMarcos,tamanioMarco);
 	tablaDeProcesos = dictionary_create();
 	marcos = malloc(sizeof(int)*cantidadMarcos);
 	for (i=0; i<cantidadMarcos;i++)//iniicializo todos los marcos a 0 (vacios)
 		marcos[i]=0;
-	while(1){
+	while(continuar){
 		int instruccion;
-		recibirYDeserializarInt(&instruccion, clienteCPU);
+		continuar=recibirYDeserializarInt(&instruccion, clienteCPU);
+		if (continuar){
+			switch(instruccion){
+			case INICIOMEMORIA:{
 
-		switch(instruccion){
-		case INICIOMEMORIA:{
+				int pid, cantPaginas, tamanioPaquete, verificador;
+				char *paquete;
 
-			int pid, cantPaginas, tamanioPaquete, verificador;
-			char *paquete;
+				recibirYDeserializarInt(&pid, clienteCPU);
+				recibirYDeserializarInt(&cantPaginas, clienteCPU);
+				log_info(archivoLog, "Recibi pid %i.\n", pid);
+				log_info(archivoLog, "Recibi cantidad de paginas %i.\n", cantPaginas);
 
-			recibirYDeserializarInt(&pid, clienteCPU);
-			recibirYDeserializarInt(&cantPaginas, clienteCPU);
-			log_info(archivoLog, "Recibi pid %i.\n", pid);
-			log_info(archivoLog, "Recibi cantidad de paginas %i.\n", cantPaginas);
+				iniciarProceso(pid, cantPaginas); //TODO hacer un if para comprobar que lo hizo correctamente
 
-			iniciarProceso(pid, cantPaginas); //TODO hacer un if para comprobar que lo hizo correctamente
+				//Le pido a Swap que inicialice un proceso:
+				tamanioPaquete = sizeof(int) * 3;
+				paquete = malloc(tamanioPaquete);
+				serializarInt(serializarInt(serializarInt(paquete, INICIARPROCESO), pid), cantPaginas);
+				log_info(archivoLog, "Antes del send de paquete.\n");
+				send(socketSwap, paquete, tamanioPaquete, 0);
+				log_info(archivoLog, "Despues del send de paquete.\n");
+				free(paquete);//Se puede sacar este free?
 
-			//Le pido a Swap que inicialice un proceso:
-			tamanioPaquete = sizeof(int) * 3;
-			paquete = malloc(tamanioPaquete);
-			serializarInt(serializarInt(serializarInt(paquete, INICIARPROCESO), pid), cantPaginas);
-			log_info(archivoLog, "Antes del send de paquete.\n");
-			send(socketSwap, paquete, tamanioPaquete, 0);
-			log_info(archivoLog, "Despues del send de paquete.\n");
-			free(paquete);//Se puede sacar este free?
+				//Recibo respuesta de Swap:
+				recibirYDeserializarInt(&verificador, socketSwap);
 
-			//Recibo respuesta de Swap:
-			recibirYDeserializarInt(&verificador, socketSwap);
+				if (verificador != -1)
+					log_info(archivoLog, "Memoria inicializada");
+				else
+					log_info(archivoLog,"Fallo al inicializar memoria");
 
-			if (verificador != -1)
-				log_info(archivoLog, "Memoria inicializada");
-			else
-				log_info(archivoLog,"Fallo al inicializar memoria");
-
-			paquete = malloc(sizeof(int));//realloc?
-			//Le contesto a CPU
-			serializarInt(paquete,verificador);
-			send(clienteCPU, paquete, sizeof(int),0);
-
-			free(paquete);
-			log_info(archivoLog, "Termino inicializar");
-			break;
-		}
-		case LEERMEMORIA:{
-
-			int pid, pagina, tamanioPaquete, verificador;
-			char *paquete, *respuesta;
-			recibirYDeserializarInt(&pid, clienteCPU);
-			recibirYDeserializarInt(&pagina, clienteCPU);
-
-			tamanioPaquete = sizeof(int) * 3;
-			paquete = malloc(tamanioPaquete);
-
-			serializarInt(serializarInt(serializarInt(paquete, LEERMEMORIA), pid), pagina);
-
-			send(socketSwap, paquete, tamanioPaquete, 0);
-
-			free(paquete);//está de más este free?
-
-			recibirYDeserializarInt(&verificador, socketSwap);
-
-			if (verificador != -1){
-				recibirYDeserializarChar(&respuesta,socketSwap);
-				log_info(archivoLog, "Página %d leida: %s",pagina,respuesta);
-				tamanioPaquete = sizeof(int)*2+strlen(respuesta)+1;
-				paquete = malloc(tamanioPaquete);//realloc?
-				serializarChar(serializarInt(paquete, verificador),respuesta);
-				free(respuesta);
-			}
-			else{
-				log_info(archivoLog,"Fallo al leer página %d.", pagina);
-				tamanioPaquete = sizeof(int);
-				paquete = malloc(sizeof(int));
+				paquete = malloc(sizeof(int));//realloc?
+				//Le contesto a CPU
 				serializarInt(paquete,verificador);
+				send(clienteCPU, paquete, sizeof(int),0);
+
+				free(paquete);
+				log_info(archivoLog, "Termino inicializar");
+				break;
 			}
-			//Le contesto a CPU
-			send(clienteCPU,paquete,tamanioPaquete,0);
+			case LEERMEMORIA:{
+				int pid, pagina, tamanioPaquete, verificador;
+				char *paquete;
+				void* contenido = malloc(tamanioMarco);
+				recibirYDeserializarInt(&pid, clienteCPU);
+				recibirYDeserializarInt(&pagina, clienteCPU);
+				verificador=leerMemoria(pid,pagina,&contenido);
 
-			free(paquete);
+				if (verificador != -1){
+					log_info(archivoLog, "Página %d leida: %s",pagina,contenido);
+					tamanioPaquete = sizeof(int)*2+strlen(contenido)+1;
+					paquete = malloc(tamanioPaquete);//realloc?
+					serializarChar(serializarInt(paquete, verificador),contenido);
+					free(contenido);
+				}
+				else{
+					log_info(archivoLog,"Fallo al leer página %d.", pagina);
+					tamanioPaquete = sizeof(int);
+					paquete = malloc(sizeof(int));
+					serializarInt(paquete,verificador);
+				}
+				//Le contesto a CPU
+				send(clienteCPU,paquete,tamanioPaquete,0);
 
-			break;
-		}
-		case ESCRIBIRMEMORIA:{
-			int pid, pagina, tamanioPaquete, verificador;
-			char *paquete, *respuesta, *contenido;
-			recibirYDeserializarInt(&pid, clienteCPU);
-			recibirYDeserializarInt(&pagina, clienteCPU);
-			recibirYDeserializarChar(&contenido,clienteCPU);
-			verificador=escribirMemoria(pid,pagina,contenido);
-			if (verificador != -1){
-				log_info(archivoLog, "Página %d escrita: %s",pagina,respuesta);
-				tamanioPaquete = sizeof(int)*2+strlen(respuesta)+1;
-				paquete = malloc(tamanioPaquete);//realloc?
-				serializarChar(serializarInt(paquete, verificador),respuesta);
-				free(respuesta);
-			}else{
-				log_info(archivoLog,"Fallo al escribir página %d.", pagina);
-				tamanioPaquete = sizeof(int);
-				paquete = malloc(sizeof(int));
+				free(paquete);
+
+				break;
+			}
+			case ESCRIBIRMEMORIA:{
+				int pid, pagina, tamanioPaquete, verificador;
+				char *paquete, *contenido;
+				recibirYDeserializarInt(&pid, clienteCPU);
+				recibirYDeserializarInt(&pagina, clienteCPU);
+				recibirYDeserializarChar(&contenido,clienteCPU);
+				verificador=escribirMemoria(pid,pagina,contenido);
+				if (verificador != -1){
+					log_info(archivoLog, "Página %d escrita: %s",pagina,contenido);
+					tamanioPaquete = sizeof(int)*2+strlen(contenido)+1;
+					paquete = malloc(tamanioPaquete);//realloc?
+					serializarChar(serializarInt(paquete, verificador),contenido);
+					free(contenido);
+				}else{
+					log_info(archivoLog,"Fallo al escribir página %d.", pagina);
+					tamanioPaquete = sizeof(int);
+					paquete = malloc(sizeof(int));
+					serializarInt(paquete,verificador);
+				}
+				//Le contesto a CPU
+				send(clienteCPU,paquete,tamanioPaquete,0);
+
+				free(paquete);
+				break;
+			}
+			case FINALIZARPROCESO:{
+				int pid, tamanioPaquete, verificador;
+				char *paquete;
+
+				recibirYDeserializarInt(&pid, clienteCPU);
+
+				if(finalizarProceso(pid))
+					log_info(archivoLog, "Finalizó correctamente en administrador de memoria");
+				else
+					log_info(archivoLog, "Error al finalizar en administrador de memoria");
+
+				tamanioPaquete = sizeof(int) * 2;
+				paquete = malloc(tamanioPaquete);
+
+				//Le pido a Swap que finalice un proceso:
+				serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
+
+				send(socketSwap, paquete, tamanioPaquete, 0);
+
+				free(paquete);//Se puede sacar este free?
+
+				//Recibo la respuesta de Swap:
+				recibirYDeserializarInt(&verificador, socketSwap);
+
+				if (verificador != -1)
+					log_info(archivoLog, "Finalizó correctamente en Swap.");
+				else
+					log_info(archivoLog, "Fallo al finalzar en Swap.");
+
+				paquete = malloc(sizeof(int));//realloc?
+				//Le contesto a CPU
 				serializarInt(paquete,verificador);
+				send(clienteCPU, paquete, sizeof(int),0);
+
+				free(paquete);
+
+				break;
 			}
-			//Le contesto a CPU
-			send(clienteCPU,paquete,tamanioPaquete,0);
-
-			free(paquete);
-			break;
-		}
-		case FINALIZARPROCESO:{
-			int pid, tamanioPaquete, verificador;
-			char *paquete;
-
-			recibirYDeserializarInt(&pid, clienteCPU);
-
-			tamanioPaquete = sizeof(int) * 2;
-			paquete = malloc(tamanioPaquete);
-
-			//Le pido a Swap que finalice un proceso:
-			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
-
-			send(socketSwap, paquete, tamanioPaquete, 0);
-
-			free(paquete);//Se puede sacar este free?
-
-			//Recibo la respuesta de Swap:
-			recibirYDeserializarInt(&verificador, socketSwap);
-
-			if (verificador != -1)
-				log_info(archivoLog, "Proceso finalizado de memoria.");
-			else
-				log_info(archivoLog,"Fallo al finalizar proceso.");
-
-			paquete = malloc(sizeof(int));//realloc?
-			//Le contesto a CPU
-			serializarInt(paquete,verificador);
-			send(clienteCPU, paquete, sizeof(int),0);
-
-			free(paquete);
-
-			break;
-		}
+			}
 		}
 
 	}
@@ -358,35 +358,48 @@ void iniciarProceso(int pid, int cantPaginas){
 }
 
 int finalizarProceso(int pid){
-
+	t_dictionary* tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
+	dictionary_iterator(tablaDePaginas,(void*)desasignarMarcos);
+	dictionary_remove_and_destroy(tablaDeProcesos,string_itoa(pid),(void*)tablaDePaginasDestroy);
+	//eliminar de TLB
+	return 1;//o -1 en error
 }
 
-void* leerMemoria(int pid, int pagina){
-	void* contenido=malloc(tamanioMarco);
+int leerMemoria(int pid, int pagina, void**contenido){
 	int success;
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
 	process_t *process = dictionary_remove(tablaDePaginas, string_itoa(pagina));
 	if (process->bitPresencia==0){//fallo de pagina
-		//reemplaza un marco
-		int paginaAReemplazar;//todo obtener nroPagina a reemplazar
-		process_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
-		process->nroMarco=victima->nroMarco;
-		victima->bitPresencia=0;
-		victima->tiempoLRU=0;
-		if(victima->bitModificado==1){
-			//todo mandar a escribir a swap
-			victima->bitModificado=0;
+		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
+					process->nroMarco = asignarNuevoMarco();
+		}else{
+			//reemplaza un marco
+			int paginaAReemplazar= paginaAReemplazarPorAlgoritmo(tablaDePaginas);
+			process_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
+			process->nroMarco=victima->nroMarco;
+			victima->bitPresencia=0;
+			victima->tiempoLRU=0;
+			victima->tiempoFIFO=0;
+			if(victima->bitModificado==1){
+				void* aux = malloc(tamanioMarco);
+				memcpy(aux,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
+				success=escribirEnSwap(aux,pid,paginaAReemplazar);
+				victima->bitModificado=0;
+			}
+			success = leerDeSwap(pid,pagina,contenido);
+			memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,*contenido,tamanioMarco);
+			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
-		dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
-	}
-	memcpy(contenido,memoriaPrincipal+process->nroMarco,tamanioMarco);//todo completar el faltante de contenido con /0
+	}else
+		memcpy(*contenido,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
 	process->bitModificado=0;
 	process->bitPresencia=1;
 	process->tiempoLRU=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
+	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	dictionary_put(tablaDePaginas,string_itoa(pagina),process);
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
-	return contenido;
+	return success;
 }
 
 
@@ -406,14 +419,16 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
 			if(victima->bitModificado==1){
-				success=escribirEnSwap(contenido,pid,pagina);
+				void* aux = malloc(tamanioMarco);
+				memcpy(aux,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
+				success=escribirEnSwap(aux,pid,pagina);
 				victima->bitModificado=0;
 			}
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}
-	memcpy(paginaAEscribir,contenido,tamanioMarco);
-	memcpy(memoriaPrincipal+process->nroMarco,paginaAEscribir,tamanioMarco);
+	memcpy(paginaAEscribir,contenido,strlen((char*)contenido));//tamanioContenido
+	memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,paginaAEscribir,tamanioMarco);
 	process->bitModificado=1;
 	process->bitPresencia=1;
 	process->tiempoLRU=1;
@@ -462,9 +477,23 @@ void actualizarTiempoFIFO(char* key, process_t* value) {
 	value->tiempoFIFO++;
 }
 
+void desasignarMarcos(char* key, process_t* value){
+	if(value->bitPresencia==1){
+		marcos[value->nroMarco]=0;
+	}
+}
+
+void tablaDePaginasDestroy(t_dictionary *tablaDePaginas){
+	dictionary_destroy_and_destroy_elements(tablaDePaginas,(void*)paginaDestroy);
+}
+
+void paginaDestroy(process_t* pagina){
+	free(pagina);
+}
+
 int escribirEnSwap(char *contenido,int pid, int pagina){
 	int tamanioPaquete, verificador;
-	char *paquete, *respuesta;
+	char *paquete;
 	tamanioPaquete = sizeof(int) * 4+strlen(contenido)+1;
 	paquete = malloc(tamanioPaquete);
 
@@ -477,6 +506,26 @@ int escribirEnSwap(char *contenido,int pid, int pagina){
 	recibirYDeserializarInt(&verificador, socketSwap);
 	return verificador;
 
+}
+
+int leerDeSwap(int pid, int pagina,void** contenido){
+	int tamanioPaquete, verificador;
+	char *paquete;
+	tamanioPaquete = sizeof(int) * 3;
+	paquete = malloc(tamanioPaquete);
+
+	serializarInt(serializarInt(serializarInt(paquete, LEERMEMORIA), pid), pagina);
+
+	send(socketSwap, paquete, tamanioPaquete, 0);
+
+	free(paquete);//está de más este free?
+
+	recibirYDeserializarInt(&verificador, socketSwap);
+	if (verificador != -1){
+		recibirYDeserializarChar(&contenido,socketSwap);
+		log_info(archivoLog, "Página %d leida: %s",pagina,contenido);
+	}
+	return verificador;
 }
 
 int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
