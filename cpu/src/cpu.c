@@ -178,7 +178,7 @@ void leermProc(int pID, int nroPagina) {
 
 
 void escribirmProc(int pID, int nroPagina, char* texto){
-	int tamPaquete= strlen(texto) + 1 + sizeof(int) *3;
+	int tamPaquete= strlen(texto) + 1 + sizeof(int) *4;
 	char* paquete= malloc(tamPaquete);
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete, ESCRIBIRMEMORIA), pID), nroPagina), texto);
 	send(socketMemoria, paquete, tamPaquete, 0);
@@ -289,6 +289,7 @@ void ejecutarmProc() {
 				int verificador;
 				recibirYDeserializarInt(&verificador,socketMemoria);
 				if (verificador!= -1){
+					recibirYDeserializarChar(&texto,socketMemoria);
 					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s", nroPagina,texto, pID, texto);
 					char* aux= string_from_format("mProc %d - Pagina %d escrita:%s",pID, nroPagina, texto);
 					string_append(&resultadosTot, aux);
@@ -327,7 +328,7 @@ void ejecutarmProc() {
 			if (quantum != -1) {
 				quantumRafaga--;
 				if (quantumRafaga == 0) {
-					break;
+					break;  //este break puede no ir aca
 				}
 			}
 
