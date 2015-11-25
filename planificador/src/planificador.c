@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
 	system("rm log_Debug");
 
 	//Creo el archivo de logs
-	archivoLog = log_create("log_Planificador", "Planificador", 1, LOG_LEVEL_TRACE);
+	archivoLog = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
@@ -429,14 +429,19 @@ void planificador() {
 
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
+	log_debug(archivoLogDebug, "Entré a finalizar rafaga");
 	pcb_t* aux = malloc(sizeof(pcb_t));
 	t_queue* queueAux = malloc(sizeof(t_queue));
 
+	log_debug(archivoLogDebug, "pase los malloc ");
 	while(!queue_is_empty(queueRunning)){
+		log_debug(archivoLogDebug, "por meter aux en running");
 		aux = queue_pop(queueRunning);
+		log_debug(archivoLogDebug,"meti aux en running :%d" , queueRunning);
 		if(pcb->processID == aux->processID){
 
 			if(tiempoBlocked != NULL){
+				log_debug(archivoLogDebug, "entre al if");
 				procesoBlocked_t* proceso = malloc(sizeof(procesoBlocked_t));
 				proceso->tiempoDormido = *tiempoBlocked;
 				proceso->pcb = pcb;
@@ -445,26 +450,34 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 				break;
 			}
 
+			log_debug(archivoLogDebug, "sali del if");
+
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			if(colaDestino != NULL)
+			if(colaDestino != NULL){
 				queue_push(colaDestino, pcb);
 
 			break;
 		} else {
+			log_debug(archivoLogDebug,"entre donde la cola destino no es null");
 			queue_push(queueAux, aux);
+			log_debug(archivoLogDebug,"meti aux en queueAux");
 		}
 	}
 
 	while(!queue_is_empty(queueAux)){
 
 		pthread_mutex_lock(&mutexQueueRunning);
+		log_debug(archivoLogDebug, "la cola queueAux no esta vacia");
 		aux = queue_pop(queueAux);
+		log_debug(archivoLogDebug,"saque aux de queueAux");
 		queue_push(queueRunning, aux);
+		log_debug(archivoLogDebug, "Meti aux en queueRunning");
 		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 
 	free(queueAux);
 	free(aux);
+	}
 }
 
 //Al ser un KLT usar sleep y se clava solo el hilo
@@ -538,6 +551,8 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		}
 		case PROCESOBLOQUEADO:{
 
+			log_info(archivoLog, "Entré al case PROCESOBLOQUEADO");
+			log_debug(archivoLogDebug, "Entré al case PROCESOBLOQUEADO");
 			int programCounter;
 			recibirYDeserializarInt(&programCounter, cpu->cliente);
 
@@ -565,10 +580,11 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			break;
 		}
 		case FINALIZARPROCESO:{
-			log_info(archivoLog, "entre al case");
+			log_info(archivoLog, "entre al case FINALIZARPROCESO");
+			log_debug(archivoLogDebug, "entre al case FINALIZARPROCESO");
+
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
-			log_info(archivoLog, "pase el receive");
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 			log_debug(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
@@ -576,23 +592,15 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			free(resultadoRafaga);
 
 			pthread_mutex_lock(&mutexQueueReady);
-			log_info(archivoLog, "EL MUTEX ES BUENO NOS PERTENECE");
+			log_info(archivoLog, "por finalizar rafaga");
 			finalizarRafaga(pcb, NULL, NULL);
-			log_info(archivoLog, "SI CAE UN RAYO Y DESAPARECE");
+			log_info(archivoLog, "Despúes de finalizasizar rafaga");
 			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
 
 			break;
 		}
-
-		default:{
-			log_info(archivoLog, "defol");
-
-			break;
-		}
-
-		//free(formaFinalizacion);
 	}
 
 	pthread_mutex_lock(&mutexQueueCPULibre);
