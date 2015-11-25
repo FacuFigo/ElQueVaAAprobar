@@ -37,7 +37,8 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7
+	PROCESOBLOQUEADO = 7,
+	PEDIDOMETRICA = 8
 } operacion_t;
 
 t_log* archivoLog;
@@ -243,8 +244,12 @@ void ejecutarmProc() {
 
 			char** leidoSplit = string_split(comandoLeido, " ");
 			instruccion = leidoSplit[0];
-			if (strcmp(instruccion,"finalizar;"))//se fija si la instruccion es finalizar, si lo es no asigna leidoSplit[1] en valor
+
+			if (strcmp(instruccion,"finalizar;")) {//se fija si la instruccion es finalizar, si lo es no asigna leidoSplit[1] en valor
+				log_info(archivoLog,"HASTA ACA LLEGO 1");
 				valor = strtol(leidoSplit[1], NULL, 10);
+			}
+
 			programCounter++;
 			if (string_equals_ignore_case(instruccion, "iniciar")) {
 				int cantPaginas=valor;
@@ -286,7 +291,6 @@ void ejecutarmProc() {
 			if (string_equals_ignore_case(instruccion, "escribir")) {
 				int nroPagina=valor;
 				char* texto=malloc(30);
-	//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
 				char* textoCorregido = string_substring(leidoSplit[2],1,strlen(leidoSplit[2])-4);//Esto corrige el texto
 				log_info(archivoLog, "%s,%s",leidoSplit[0],leidoSplit[1]);
 				escribirmProc(pID, nroPagina, textoCorregido);
@@ -329,6 +333,8 @@ void ejecutarmProc() {
 				operacion = FINALIZARPROCESO;
 			}
 
+			sleep(retardo);
+
 			if (quantum != -1) {
 				quantumRafaga--;
 				if (quantumRafaga == 0) {
@@ -336,22 +342,19 @@ void ejecutarmProc() {
 				}
 			}
 
-			sleep(retardo);
-//			fgets(comandoLeido, 30, mCod);
-//			char** leidoSplit = string_split(comandoLeido, " ");
-//			instruccion = leidoSplit[0];
-//			valor = strtol(leidoSplit[1], NULL, 10);
-//			log_info(archivoLog,"SEGUNDO comando leido: %s", comandoLeido);
 			free(leidoSplit);
+			log_info(archivoLog, "NUMERO OPERACION EN EL WHILE: %d",operacion);
+
 		}while(!feof(mCod)&&!entradaSalida);//fin del super while
 
+		log_info(archivoLog, "NUMERO FUERA DEL WHILE: %d",operacion);
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 		//free(comandoLeido);
 
 		fclose(mCod);
 		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 		paqueteRafaga = malloc(tamanioPaquete);
-		serializarInt(serializarChar(paqueteRafaga, resultadosTot), operacion); //pID, formaDeFinalizacion
+		serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot); //pID, formaDeFinalizacion
 		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
@@ -361,15 +364,3 @@ void ejecutarmProc() {
 
 
 
-corregirTexto(char* textoOriginal,char* textoCorregido){
-	int i=1;
-	int t=0;
-
-	while(textoOriginal[i]!= '"'){
-		textoCorregido[t]= textoOriginal[i];
-		i++;
-		t++;
-
-	}
-
-}

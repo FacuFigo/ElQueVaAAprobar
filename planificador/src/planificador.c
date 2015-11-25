@@ -44,8 +44,7 @@ typedef enum {
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
 	PROCESOBLOQUEADO = 7,
-	FINALIZAPROCESO = 8 ,
-	PEDIDOMETRICA = 9,
+	PEDIDOMETRICA = 8
 } operacion_t;
 
 t_log* archivoLog;
@@ -137,7 +136,7 @@ int main(int argc, char** argv) {
 	system("rm log_Debug");
 
 	//Creo el archivo de logs
-	archivoLog = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
+	archivoLog = log_create("log_Planificador", "Planificador", 1, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
@@ -508,11 +507,11 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 	free(paquete);
 	
-	int* formaFinalizacion = malloc(sizeof(int));
-	recibirYDeserializarInt(formaFinalizacion, cpu->cliente);
-	log_debug(archivoLogDebug,"forma de finalizacion:%i",formaFinalizacion);
+	int formaFinalizacion = malloc(sizeof(int));
+	recibirYDeserializarInt(&formaFinalizacion, cpu->cliente);
+	log_debug(archivoLogDebug,"forma de finalizacion:%d",formaFinalizacion);
 
-	switch(*formaFinalizacion){
+	switch(formaFinalizacion){
 
 		case RAFAGAPROCESO:{
 
@@ -565,25 +564,35 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 			break;
 		}
-		case FINALIZAPROCESO:{
-
+		case FINALIZARPROCESO:{
+			log_info(archivoLog, "entre al case");
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
+			log_info(archivoLog, "pase el receive");
 
-			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
+			log_debug(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
 			pthread_mutex_lock(&mutexQueueReady);
+			log_info(archivoLog, "EL MUTEX ES BUENO NOS PERTENECE");
 			finalizarRafaga(pcb, NULL, NULL);
+			log_info(archivoLog, "SI CAE UN RAYO Y DESAPARECE");
 			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
 
+			break;
 		}
 
-		free(formaFinalizacion);
+		default:{
+			log_info(archivoLog, "defol");
+
+			break;
+		}
+
+		//free(formaFinalizacion);
 	}
 
 	pthread_mutex_lock(&mutexQueueCPULibre);
