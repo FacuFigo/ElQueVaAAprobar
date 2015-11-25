@@ -44,7 +44,8 @@ typedef enum {
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
 	PROCESOBLOQUEADO = 7,
-	FINALIZAPROCESO = 8
+	FINALIZAPROCESO = 8 ,
+	PEDIDOMETRICA = 9,
 } operacion_t;
 
 t_log* archivoLog;
@@ -102,6 +103,12 @@ typedef struct {
 	pcb_t* pcb;
 	cpu_t* clienteCPU;
 } procesoCorriendo_t;
+
+typedef struct {
+	int pid;
+	estados_t estadoProceso;
+	char* mcod;
+} ps_t;
 
 //Funciones de configuracion
 void configurarPlanificador(char* config);
@@ -344,11 +351,31 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 }
 
 void estadoProcesos(){
-	
+	//Este comando deberá escribir en la pantalla del Planificador el PID, el nombre del programa y el estado de cada proceso “mProc”.
+	//El formato deberá ser: mProc PID: nombre -> estado, escribiendo en una línea diferente cada proceso “mProc”
+
+		// creo un array para guardar los mproc que haya en las distintas colas queueReady, queueRunning y queueBlocked
+		// guardo los PID asignandolos a una variable dinamica, guardo los nombres mcod en variable din, y lo mismo con el estado segun la cola que estén
+		// logueo resultados
+
+	ps_t vEstados[100];
+	int i = 0;
+	for (i = 0; i < 100; i++){
+	// busco en las colas y asigno como vEstados.pid[i] = etc
+	}
 }
 
 void comandoCPU(){
+	//Envio la peticion a cpu de metrica, cantidad cpus ponerla global e ir mostrando. 1 for para send y recv
+	int tamanioPaquete = sizeof(int);
+	char* paquete = malloc(tamanioPaquete);
 
+	serializarInt(paquete, PEDIDOMETRICA);
+
+	send(clienteCPUPadre, paquete, tamanioPaquete, 0);
+
+	free(paquete);
+	//recv(); ver si se lo mando a cada hilo de cpu asi voy mostrando.
 }
 
 void planificador() {
