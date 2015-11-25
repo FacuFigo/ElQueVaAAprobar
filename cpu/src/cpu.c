@@ -235,14 +235,16 @@ void ejecutarmProc() {
 		mCod=fopen(path,"r");
 
 
-		fgets(comandoLeido, 30, mCod);
-		log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
-		char** leidoSplit = string_split(comandoLeido, " ");
-		instruccion = leidoSplit[0];
-		valor = strtol(leidoSplit[1], NULL, 10);
 
-		while (!feof(mCod)&&!entradaSalida) {
+		do {
+			fgets(comandoLeido, 30, mCod);
+			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
+
+			char** leidoSplit = string_split(comandoLeido, " ");
+			instruccion = leidoSplit[0];
+			if (strcmp(instruccion,"finalizar;"))//se fija si la instruccion es finalizar, si lo es no asigna leidoSplit[1] en valor
+				valor = strtol(leidoSplit[1], NULL, 10);
 			programCounter++;
 			if (string_equals_ignore_case(instruccion, "iniciar")) {
 				int cantPaginas=valor;
@@ -285,7 +287,9 @@ void ejecutarmProc() {
 				int nroPagina=valor;
 				char* texto=malloc(30);
 	//			corregirTexto(leidoSplit[2], texto);  //hice esta funcion para sacar el ; y las "  pero nose si esta bien
-				escribirmProc(pID, nroPagina, texto);
+				char* textoCorregido = string_substring(leidoSplit[2],1,strlen(leidoSplit[2])-4);//Esto corrige el texto
+				log_info(archivoLog, "%s,%s",leidoSplit[0],leidoSplit[1]);
+				escribirmProc(pID, nroPagina, textoCorregido);
 				int verificador;
 				recibirYDeserializarInt(&verificador,socketMemoria);
 				if (verificador!= -1){
@@ -311,7 +315,7 @@ void ejecutarmProc() {
 				entradaSalida=1;
 
 			}
-			if (string_equals_ignore_case(instruccion, "finalizar")) {
+			if (string_equals_ignore_case(instruccion, "finalizar;")) {
 				finalizarmProc(pID);
 				int verificador;
 				recibirYDeserializarInt(&verificador, socketMemoria);
@@ -333,17 +337,17 @@ void ejecutarmProc() {
 			}
 
 			sleep(retardo);
-			fgets(comandoLeido, 30, mCod);
-			char** leidoSplit = string_split(comandoLeido, " ");
-			instruccion = leidoSplit[0];
-			valor = strtol(leidoSplit[1], NULL, 10);
-			log_info(archivoLog,"SEGUNDO comando leido: %s", comandoLeido);
-
-		}//fin del super while
+//			fgets(comandoLeido, 30, mCod);
+//			char** leidoSplit = string_split(comandoLeido, " ");
+//			instruccion = leidoSplit[0];
+//			valor = strtol(leidoSplit[1], NULL, 10);
+//			log_info(archivoLog,"SEGUNDO comando leido: %s", comandoLeido);
+			free(leidoSplit);
+		}while(!feof(mCod)&&!entradaSalida);//fin del super while
 
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 		//free(comandoLeido);
-		free(leidoSplit);
+
 		fclose(mCod);
 		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 		paqueteRafaga = malloc(tamanioPaquete);

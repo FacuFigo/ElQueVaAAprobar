@@ -88,7 +88,7 @@ int configurarSocketServidor();
 void admDeMemoria();
 void iniciarProceso(int pid, int cantPaginas);
 int finalizarProceso(int pid);
-int leerMemoria(int pid, int pagina, void** contenido);
+int leerMemoria(int pid, int pagina, void* contenido);
 int escribirMemoria(int pid,int pagina, void* contenido);
 int asignarNuevoMarco();
 int cantidadMarcosAsignados(t_dictionary *tablaDePaginas);
@@ -144,8 +144,8 @@ void configurarAdmMemoria(char* config) {
 		maximoMarcosPorProceso = config_get_int_value(configurarAdmMemoria, "MAXIMO_MARCOS_POR_PROCESO");
 	if (config_has_property(configurarAdmMemoria, "CANTIDAD_MARCOS"))
 		cantidadMarcos = config_get_int_value(configurarAdmMemoria,	"CANTIDAD_MARCOS");
-	if (config_has_property(configurarAdmMemoria, "TAMANIO_MARCO"))
-		tamanioMarco = config_get_int_value(configurarAdmMemoria, "TAMANIO_MARCO");
+	if (config_has_property(configurarAdmMemoria, "TAMANIO_MARCOS"))
+		tamanioMarco = config_get_int_value(configurarAdmMemoria, "TAMANIO_MARCOS");
 	if (config_has_property(configurarAdmMemoria, "ENTRADAS_TLB"))
 		entradasTLB = config_get_int_value(configurarAdmMemoria, "ENTRADAS_TLB");
 	if (config_has_property(configurarAdmMemoria, "TLB_HABILITADA"))
@@ -248,10 +248,10 @@ void admDeMemoria(){
 			case LEERMEMORIA:{
 				int pid, pagina, tamanioPaquete, verificador;
 				char *paquete;
-				void* contenido = malloc(tamanioMarco);
+				void* contenido = calloc(1,tamanioMarco);
 				recibirYDeserializarInt(&pid, clienteCPU);
 				recibirYDeserializarInt(&pagina, clienteCPU);
-				verificador=leerMemoria(pid,pagina,&contenido);
+				verificador=leerMemoria(pid,pagina,contenido);
 
 				if (verificador != -1){
 					log_info(archivoLog, "Página %d leida: %s",pagina,contenido);
@@ -369,10 +369,10 @@ int finalizarProceso(int pid){
 	return 1;//o -1 en error
 }
 
-int leerMemoria(int pid, int pagina, void**contenido){
+int leerMemoria(int pid, int pagina, void*contenido){
 	int success;
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
-	process_t *process = dictionary_remove(tablaDePaginas, string_itoa(pagina));
+	process_t *process = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	if (process->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
 					process->nroMarco = asignarNuevoMarco();
@@ -390,18 +390,18 @@ int leerMemoria(int pid, int pagina, void**contenido){
 				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
 			}
-			success = leerDeSwap(pid,pagina,contenido);
-			memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,*contenido,tamanioMarco);
+			success = leerDeSwap(pid,pagina,&contenido);
+			memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,contenido,tamanioMarco);
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}else
-		memcpy(*contenido,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
+		memcpy(contenido,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
 	process->bitModificado=0;
 	process->bitPresencia=1;
 	process->tiempoLRU=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
-	dictionary_put(tablaDePaginas,string_itoa(pagina),process);
+	//dictionary_put(tablaDePaginas,string_itoa(pagina),process);
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
 	return success;
 }
@@ -409,7 +409,7 @@ int leerMemoria(int pid, int pagina, void**contenido){
 
 int escribirMemoria(int pid, int pagina, void* contenido){
 	int success=1;
-	void *paginaAEscribir = calloc(tamanioMarco,4);
+	void *paginaAEscribir = calloc(1,tamanioMarco);
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
 	process_t *process = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",process->nroMarco);
@@ -435,10 +435,12 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}
-	log_info(archivoLog,"Antes del memcpy en memoria principal.\n");
-	memcpy(paginaAEscribir,contenido,strlen((char*)contenido));//tamanioContenido
+	log_info(archivoLog,"Antes del memcpy en memoria principal, strlen de contenido: %i,%i.\n",memoriaPrincipal+process->nroMarco*tamanioMarco,memoriaPrincipal);
+	memcpy(paginaAEscribir,contenido,strlen(contenido));//tamanioContenido
+
+	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",paginaAEscribir,strlen(paginaAEscribir));
 	memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,paginaAEscribir,tamanioMarco);
-	log_info(archivoLog,"Despues del memcpy en memoria principal\n");
+	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",memoriaPrincipal,strlen(memoriaPrincipal));
 	process->bitModificado=1;
 	process->bitPresencia=1;
 	process->tiempoLRU=1;
