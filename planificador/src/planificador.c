@@ -215,30 +215,38 @@ void manejoDeConsola() {
 	int mantenerConsola = 1;
 
 	while (mantenerConsola) {
+		//scanf("%s %s", comando.comando, comando.parametro);
+		//getchar();
 
 		comando_t comando;
-		
+
 		comando.comando = malloc(10);
 		comando.parametro = malloc(50);
-		
-		scanf("%s %s", comando.comando, comando.parametro);
-		getchar();
-		if (comando.parametro != NULL){
-			if (string_equals_ignore_case(comando.comando, "correr")) {
+
+		char* comandoLeido = malloc(20);
+		fgets(comandoLeido, 20, stdin);
+
+		char** comandoSplit = string_n_split(comandoLeido, 2, " ");
+		comando.comando = comandoSplit[0];
+		comando.parametro = comandoSplit[1];
+
+		log_debug(archivoLogDebug, "Comando leido: %s", comando.comando);
+
+		if (string_starts_with(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
 			}
-			else{
+
+		if(string_starts_with(comando.comando, "finalizar")){
 				//Cambio el pid string que viene como parametro por un int
 				int pidNumero = strtol(comando.parametro, NULL, 10);
 				finalizarProceso(pidNumero);
 			}
-		} else {
-			if (string_equals_ignore_case(comando.comando, "ps"))
-				estadoProcesos();
-			else 
-				comandoCPU();
-		}
 
+		if (string_starts_with(comando.comando, "ps"))
+				estadoProcesos();
+
+		if(string_starts_with(comando.comando, "cpu"))
+				comandoCPU();
 		
 		free(comando.comando);
 		free(comando.parametro);
