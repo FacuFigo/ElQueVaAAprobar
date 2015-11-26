@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
 		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
 		log_info(archivoLog, "Instancia de CPU %i creada.\n", threadCounter);
 	}
-
+//TODO ver si funcan los hilos
 	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
 		pthread_join(hilos[threadCounter],NULL);//se saco el join --> buscar un super join
 		log_info(archivoLog, "Termino hilo de CPU %i", threadCounter);
@@ -315,7 +315,7 @@ void ejecutarmProc() {
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
 				free(aux);
-				operacion = ENTRADASALIDA;
+				operacion = PROCESOBLOQUEADO;
 				entradaSalida=1;
 
 			}
@@ -354,7 +354,11 @@ void ejecutarmProc() {
 		fclose(mCod);
 		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 		paqueteRafaga = malloc(tamanioPaquete);
-		serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot); //pID, formaDeFinalizacion
+		if (operacion == PROCESOBLOQUEADO) {
+			serializarChar(paqueteRafaga,resultadosTot);
+		} else { //TODO CAMBIAR ESTA WEA DAÑSLDKALÑEWQEM
+			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
+		}//pID, formaDeFinalizacion
 		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
