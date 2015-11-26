@@ -284,10 +284,13 @@ void admDeEspacios(){
 
 			case FINALIZARPROCESO:{
 
+				log_debug(logDebug, "Antes de recibir.");
+
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 
 				char* paquete = malloc(sizeof(int));
 
+				log_debug(logDebug, "Antes de entrar a liberar, pid: %i", proceso->processID);
 				if(liberarMemoria(proceso->processID) == -1){
 					log_debug(logDebug, "No se pudo finalizar el proceso %i.", proceso->processID);
 
@@ -382,6 +385,7 @@ void admDeEspacios(){
 				break;
 			}
 		}
+		pthread_mutex_unlock(&accesoAMemoria);
 		free(proceso);
 	}
 }
@@ -448,6 +452,7 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 int liberarMemoria(int pid){
 	int numero = 0;
 
+	log_debug(logDebug, "Entro a liberarMemoria.");
 	pagina_t* pagina = malloc(sizeof(pagina_t));
 	pagina = list_get(listaGestionEspacios, numero);
 
@@ -458,6 +463,7 @@ int liberarMemoria(int pid){
 
 	while(pagina->proceso == pid){
 
+		log_debug(logDebug, "Encontro la pagina inicial para liberar.");
 		liberarEspacioEnArchivo(pagina->numeroPagina);
 
 		pagina->disponibilidad = 1;

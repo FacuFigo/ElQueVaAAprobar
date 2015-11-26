@@ -495,6 +495,7 @@ void entradaSalida(){
 			proceso = queue_pop(queueBlocked);
 			pthread_mutex_unlock(&mutexQueueReady);
 
+			log_debug(archivoLogDebug, "Entra al thread bloqueado, proceso: %i tiempo: %i", proceso->pcb->processID, proceso->tiempoDormido);
 			sleep(proceso->tiempoDormido);
 
 			pthread_mutex_lock(&mutexQueueReady);
@@ -510,12 +511,13 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	pcb_t* pcb =  proceso->pcb;
 	cpu_t* cpu =  proceso->clienteCPU;
 
-	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo.");
+	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo, proceso: %i.", pcb->processID);
 
 	//Envio el proceso que va a correr despues
 	int tamanioPaquete = sizeof(int) * 4 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
+	log_debug(archivoLogDebug, "Pase el malloc de paquete");
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
 
 	send(cpu->cliente, paquete, tamanioPaquete, 0);
@@ -564,18 +566,16 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
-			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.",resultadoRafaga);
 
 			free(resultadoRafaga);
 
-			pthread_mutex_lock(&mutexQueueBlocked);
-
-			finalizarRafaga(pcb, queueBlocked, &tiempoBloqueado);
-			pthread_mutex_unlock(&mutexQueueBlocked);
-
 			pcb->estadoProceso = BLOCKED;
 			pcb->programCounter = programCounter;
+
+			pthread_mutex_lock(&mutexQueueBlocked);
+			finalizarRafaga(pcb, queueBlocked, &tiempoBloqueado);
+			pthread_mutex_unlock(&mutexQueueBlocked);
 
 			log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
 
