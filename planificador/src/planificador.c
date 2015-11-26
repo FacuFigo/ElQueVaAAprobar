@@ -43,7 +43,6 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -572,15 +571,18 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 			break;
 		}
-		case PROCESOBLOQUEADO:{
+		case ENTRADASALIDA:{
 
 			log_info(archivoLog, "Entré al case PROCESOBLOQUEADO");
 			log_debug(archivoLogDebug, "Entré al case PROCESOBLOQUEADO");
+
 			int programCounter;
 			recibirYDeserializarInt(&programCounter, cpu->cliente);
+			log_debug(archivoLogDebug, "program counter:%i", programCounter);
 
 			int tiempoBloqueado;
 			recibirYDeserializarInt(&tiempoBloqueado, cpu->cliente);
+			log_debug(archivoLogDebug, "tiempo bloqueado:%i", tiempoBloqueado);
 
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
@@ -608,7 +610,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 

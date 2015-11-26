@@ -37,7 +37,6 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -61,7 +60,6 @@ void iniciarmProc(int pID, int cantPaginas);
 void leermProc(int pID, int nroPagina);
 void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
-void entradaSalidamProc();
 
 int main(int argc, char** argv) {
 
@@ -187,13 +185,7 @@ void escribirmProc(int pID, int nroPagina, char* texto){
 
 }
 
-void entradaSalidamProc(int pID, int tiempo){
-	int tamPaquete= sizeof(int)*3;
-	char* paquete= malloc(tamPaquete);
-	serializarInt(serializarInt(serializarInt(paquete, PROCESOBLOQUEADO), pID), tiempo);
-	send(socketPlanificador, paquete, tamPaquete, 0);
-	free(paquete);
-}
+
 
 
 void ejecutarmProc() {
@@ -310,12 +302,12 @@ void ejecutarmProc() {
 			}
 			if (string_equals_ignore_case(instruccion, "entrada-salida")) {
 				tiempoIO= valor;
-				entradaSalidamProc(pID, tiempoIO);
+
 				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
 				free(aux);
-				operacion = PROCESOBLOQUEADO;
+				operacion = ENTRADASALIDA;
 				entradaSalida=1;
 
 			}
@@ -327,6 +319,7 @@ void ejecutarmProc() {
 					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
 					char* aux = string_from_format("mProc %d finalizado",pID);
 					string_append(&resultadosTot, aux);
+					free(aux);
 				} else {
 					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
 				}
@@ -349,16 +342,17 @@ void ejecutarmProc() {
 
 		log_info(archivoLog, "NUMERO FUERA DEL WHILE: %d",operacion);
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
-		//free(comandoLeido);
 
 		fclose(mCod);
-		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
-		paqueteRafaga = malloc(tamanioPaquete);
-		if (operacion == PROCESOBLOQUEADO) {
-			serializarChar(paqueteRafaga,resultadosTot);
-		} else { //TODO CAMBIAR ESTA WEA DAÑSLDKALÑEWQEM
+		if (operacion == ENTRADASALIDA) { //entra aca si es entrada-salida, o al else si es otra
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*4;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(serializarInt(serializarInt(paqueteRafaga, operacion),programCounter),tiempoIO), resultadosTot);
+		} else {
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
+			paqueteRafaga = malloc(tamanioPaquete);
 			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
-		}//pID, formaDeFinalizacion
+		}
 		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
