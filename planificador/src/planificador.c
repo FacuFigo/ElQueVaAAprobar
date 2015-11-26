@@ -103,12 +103,6 @@ typedef struct {
 	cpu_t* clienteCPU;
 } procesoCorriendo_t;
 
-typedef struct {
-	int pid;
-	estados_t estadoProceso;
-	char* mcod;
-} ps_t;
-
 //Funciones de configuracion
 void configurarPlanificador(char* config);
 int configurarSocketServidor();
@@ -130,6 +124,7 @@ int buscarYEliminarEnCola(t_queue* cola, int pid);
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
 void entradaSalida();
 void procesoCorriendo(procesoCorriendo_t* proceso);
+void logueoEstados(t_queue* cola);
 
 int main(int argc, char** argv) {
 
@@ -350,18 +345,43 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 }
 
 void estadoProcesos(){
-	//Este comando deberá escribir en la pantalla del Planificador el PID, el nombre del programa y el estado de cada proceso “mProc”.
-	//El formato deberá ser: mProc PID: nombre -> estado, escribiendo en una línea diferente cada proceso “mProc”
 
-		// creo un array para guardar los mproc que haya en las distintas colas queueReady, queueRunning y queueBlocked
-		// guardo los PID asignandolos a una variable dinamica, guardo los nombres mcod en variable din, y lo mismo con el estado segun la cola que estén
-		// logueo resultados
+	log_debug(archivoLogDebug, "Entré a estadoProcesos");
 
-	ps_t vEstados[100];
-	int i = 0;
-	for (i = 0; i < 100; i++){
-	// busco en las colas y asigno como vEstados.pid[i] = etc
+
+
+	// Me voy fijando si las colas no son vacias, saco a variable aux y logueo
+	if(!queue_is_empty(queueReady)){
+		logueoEstados(queueReady);
+
 	}
+	if(!queue_is_empty(queueBlocked)){
+		logueoEstados(queueBlocked);
+	}
+	if(!queue_is_empty(queueRunning)){
+		logueoEstados(queueRunning);
+	}
+	log_debug(archivoLogDebug, "Estados logueados, saliendo de ps");
+}
+
+void logueoEstados(t_queue* cola){
+
+	pcb_t* aux = malloc(sizeof(pcb_t));
+	t_queue* queueAux;
+	queueAux = queue_create();
+
+	while(!queue_is_empty(cola)){
+		aux = queue_pop(cola);
+		log_debug(archivoLogDebug, "mProc %i: %s -> %s", aux->processID, aux->path, aux->estadoProceso);
+		queue_push(queueAux, aux);
+	}
+
+	while(!queue_is_empty(queueAux)){
+		aux = queue_pop(queueAux);
+		queue_push(cola, aux);
+	}
+	free(aux);
+	queue_destroy(queueAux);
 }
 
 void comandoCPU(){
@@ -392,7 +412,6 @@ void planificador() {
 			pcb = queue_pop(queueReady);
 			pthread_mutex_unlock(&mutexQueueReady);
 
-			log_info(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
 			log_debug(archivoLogDebug, "Proceso a Ejecutar: %i", pcb->processID);
 
 			pthread_mutex_lock(&mutexQueueCPULibre);
