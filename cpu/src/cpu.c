@@ -190,7 +190,7 @@ void escribirmProc(int pID, int nroPagina, char* texto){
 void entradaSalidamProc(int pID, int tiempo){
 	int tamPaquete= sizeof(int)*3;
 	char* paquete= malloc(tamPaquete);
-	serializarInt(serializarInt(serializarInt(paquete, ENTRADASALIDA), pID), tiempo);
+	serializarInt(serializarInt(serializarInt(paquete, PROCESOBLOQUEADO), pID), tiempo);
 	send(socketPlanificador, paquete, tamPaquete, 0);
 	free(paquete);
 }

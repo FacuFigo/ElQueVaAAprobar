@@ -56,3 +56,47 @@
 [INFO] 00:56:42:502 CPU/(2440:2496): Conectado a la Memoria 0.
 
 [INFO] 00:57:16:529 CPU/(2440:2440): Instancia de CPU 0 creada
+[INFO] 19:50:09:968 CPU/(3818:3818): Archivo de logs creado.
+
+[INFO] 19:50:11:647 CPU/(3818:3818): cantidad de hilos: 1
+[INFO] 19:50:13:702 CPU/(3818:3818): Conectado al Planificador 4.
+
+[INFO] 19:50:20:9 CPU/(3818:3818): Conectado a la Memoria 5.
+
+[INFO] 19:50:24:809 CPU/(3818:3818): Recibi quantum 2
+[INFO] 19:50:46:527 CPU/(3818:3840): Conectado al Planificador 6.
+
+[INFO] 19:50:48:371 CPU/(3818:3818): Instancia de CPU 1 creada.
+
+[INFO] 19:52:57:264 CPU/(3904:3904): Archivo de logs creado.
+
+[INFO] 19:52:57:264 CPU/(3904:3904): cantidad de hilos: 1
+[INFO] 19:52:57:265 CPU/(3904:3904): Conectado al Planificador 4.
+
+[INFO] 19:52:57:265 CPU/(3904:3904): Conectado a la Memoria 5.
+
+[INFO] 19:52:57:265 CPU/(3904:3904): Recibi quantum 2
+[INFO] 19:52:57:304 CPU/(3904:3904): Instancia de CPU 1 creada.
+
+[INFO] 19:53:10:599 CPU/(3904:3912): Conectado al Planificador 6.
+
+[INFO] 19:53:45:131 CPU/(3904:3912): Recibi operacion 0.
+
+[INFO] 19:53:45:131 CPU/(3904:3912): Recibi pid 1.
+
+[INFO] 19:53:45:131 CPU/(3904:3912): Recibi program counter 0.
+
+[INFO] 19:53:45:131 CPU/(3904:3912): Recibi path MuyCorto.cod.
+
+[INFO] 20:01:54:71 CPU/(3973:3973): Archivo de logs creado.
+
+[INFO] 20:01:54:71 CPU/(3973:3973): cantidad de hilos: 1
+[INFO] 20:01:54:71 CPU/(3973:3973): Conectado al Planificador 4.
+
+[INFO] 20:01:54:72 CPU/(3973:3973): Conectado a la Memoria 5.
+
+[INFO] 20:01:54:72 CPU/(3973:3973): Recibi quantum 2
+[INFO] 20:01:54:98 CPU/(3973:3973): Instancia de CPU 1 creada.
+
+[INFO] 20:01:58:21 CPU/(3973:3981): Conectado al Planificador 6.
+
