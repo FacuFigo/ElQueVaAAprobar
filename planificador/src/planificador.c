@@ -43,7 +43,6 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -103,12 +102,6 @@ typedef struct {
 	cpu_t* clienteCPU;
 } procesoCorriendo_t;
 
-typedef struct {
-	int pid;
-	estados_t estadoProceso;
-	char* mcod;
-} ps_t;
-
 //Funciones de configuracion
 void configurarPlanificador(char* config);
 int configurarSocketServidor();
@@ -130,6 +123,7 @@ int buscarYEliminarEnCola(t_queue* cola, int pid);
 void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
 void entradaSalida();
 void procesoCorriendo(procesoCorriendo_t* proceso);
+void logueoEstados(t_queue* cola);
 
 int main(int argc, char** argv) {
 
@@ -223,28 +217,46 @@ void manejoDeConsola() {
 	while (mantenerConsola) {
 
 		comando_t comando;
-		
+
 		comando.comando = malloc(10);
 		comando.parametro = malloc(50);
-		
-		scanf("%s %s", comando.comando, comando.parametro);
-		getchar();
-		if (comando.parametro != NULL){
-			if (string_equals_ignore_case(comando.comando, "correr")) {
+
+		char* comandoLeido = malloc(25);
+		fgets(comandoLeido, 25, stdin);
+
+		char** comandoSplit = string_n_split(comandoLeido, 2, " ");
+		log_debug(archivoLogDebug, "Hace el split.");
+		comando.comando = comandoSplit[0];
+
+		if(comandoSplit[1] != NULL){
+			comando.parametro = comandoSplit[1];
+			log_debug(archivoLogDebug, "Hace las asignaciones.");
+
+			char* nuevaLinea;
+			nuevaLinea = strchr(comando.parametro, 10);
+			log_debug(archivoLogDebug, "Hace strchr.");
+
+			if (nuevaLinea != NULL)
+				*nuevaLinea = '\0';
+
+			log_debug(archivoLogDebug, "Cambia la nueva linea por vacio.");
+		}
+
+		if (string_starts_with(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
 			}
-			else{
+
+		if(string_starts_with(comando.comando, "finalizar")){
 				//Cambio el pid string que viene como parametro por un int
 				int pidNumero = strtol(comando.parametro, NULL, 10);
 				finalizarProceso(pidNumero);
 			}
-		} else {
-			if (string_equals_ignore_case(comando.comando, "ps"))
-				estadoProcesos();
-			else 
-				comandoCPU();
-		}
 
+		if (string_starts_with(comando.comando, "ps"))
+				estadoProcesos();
+
+		if(string_starts_with(comando.comando, "cpu"))
+				comandoCPU();
 		
 		free(comando.comando);
 		free(comando.parametro);
@@ -350,18 +362,68 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 }
 
 void estadoProcesos(){
-	//Este comando deberá escribir en la pantalla del Planificador el PID, el nombre del programa y el estado de cada proceso “mProc”.
-	//El formato deberá ser: mProc PID: nombre -> estado, escribiendo en una línea diferente cada proceso “mProc”
 
-		// creo un array para guardar los mproc que haya en las distintas colas queueReady, queueRunning y queueBlocked
-		// guardo los PID asignandolos a una variable dinamica, guardo los nombres mcod en variable din, y lo mismo con el estado segun la cola que estén
-		// logueo resultados
+	log_debug(archivoLogDebug, "Entré a estadoProcesos");
 
-	ps_t vEstados[100];
-	int i = 0;
-	for (i = 0; i < 100; i++){
-	// busco en las colas y asigno como vEstados.pid[i] = etc
+
+
+	// Me voy fijando si las colas no son vacias, saco a variable aux y logueo
+	if(!queue_is_empty(queueReady)){
+		pthread_mutex_lock(&mutexQueueReady);
+		logueoEstados(queueReady);
+		pthread_mutex_unlock(&mutexQueueReady);
 	}
+	if(!queue_is_empty(queueBlocked)){
+		pthread_mutex_lock(&mutexQueueBlocked);
+		logueoEstados(queueBlocked);
+		pthread_mutex_unlock(&mutexQueueBlocked);
+	}
+	if(!queue_is_empty(queueRunning)){
+		pthread_mutex_lock(&mutexQueueRunning);
+		logueoEstados(queueRunning);
+		pthread_mutex_unlock(&mutexQueueRunning);
+	}
+	log_debug(archivoLogDebug, "Estados logueados, saliendo de ps");
+}
+
+void logueoEstados(t_queue* cola){
+
+	pcb_t* pcb = malloc(sizeof(pcb_t));
+	t_queue* queueAux;
+	queueAux = queue_create();
+
+	while(!queue_is_empty(cola)){
+		pcb = queue_pop(cola);
+		switch (pcb->estadoProceso){
+
+			case READY:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Listo", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+			case RUNNING:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Ejecutando", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+			case BLOCKED:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Bloqueado", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+
+		}
+	}
+
+	while(!queue_is_empty(queueAux)){
+		pcb = queue_pop(queueAux);
+		queue_push(cola, pcb);
+	}
+	free(pcb);
+	queue_destroy(queueAux);
 }
 
 void comandoCPU(){
@@ -392,7 +454,6 @@ void planificador() {
 			pcb = queue_pop(queueReady);
 			pthread_mutex_unlock(&mutexQueueReady);
 
-			log_info(archivoLog, "Proceso a Ejecutar: %i", pcb->processID);
 			log_debug(archivoLogDebug, "Proceso a Ejecutar: %i", pcb->processID);
 
 			pthread_mutex_lock(&mutexQueueCPULibre);
@@ -431,13 +492,15 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
 	log_debug(archivoLogDebug, "Entré a finalizar rafaga");
 	pcb_t* aux = malloc(sizeof(pcb_t));
-	t_queue* queueAux = malloc(sizeof(t_queue));
+	t_queue* queueAux;
+
+	queueAux = queue_create();
 
 	log_debug(archivoLogDebug, "pase los malloc ");
 	while(!queue_is_empty(queueRunning)){
-		log_debug(archivoLogDebug, "por meter aux en running");
+		log_debug(archivoLogDebug, "por sacar aux en running");
 		aux = queue_pop(queueRunning);
-		log_debug(archivoLogDebug,"meti aux en running :%d" , queueRunning);
+		log_debug(archivoLogDebug,"Saco aux en running");
 		if(pcb->processID == aux->processID){
 
 			if(tiempoBlocked != NULL){
@@ -453,7 +516,7 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 			log_debug(archivoLogDebug, "sali del if");
 
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			if(colaDestino != NULL){
+			if(colaDestino != NULL)
 				queue_push(colaDestino, pcb);
 
 			break;
@@ -464,10 +527,11 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 		}
 	}
 
+	log_debug(archivoLogDebug, "Tamaño de la cola: %i", queue_size(queueAux));
 	while(!queue_is_empty(queueAux)){
 
 		pthread_mutex_lock(&mutexQueueRunning);
-		log_debug(archivoLogDebug, "la cola queueAux no esta vacia");
+		log_debug(archivoLogDebug, "la cola de Figo no esta vacia");
 		aux = queue_pop(queueAux);
 		log_debug(archivoLogDebug,"saque aux de queueAux");
 		queue_push(queueRunning, aux);
@@ -475,9 +539,8 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 
-	free(queueAux);
+	queue_destroy(queueAux);
 	free(aux);
-	}
 }
 
 //Al ser un KLT usar sleep y se clava solo el hilo
@@ -493,6 +556,7 @@ void entradaSalida(){
 			proceso = queue_pop(queueBlocked);
 			pthread_mutex_unlock(&mutexQueueReady);
 
+			log_debug(archivoLogDebug, "Entra al thread bloqueado, proceso: %i tiempo: %i", proceso->pcb->processID, proceso->tiempoDormido);
 			sleep(proceso->tiempoDormido);
 
 			pthread_mutex_lock(&mutexQueueReady);
@@ -508,21 +572,23 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	pcb_t* pcb =  proceso->pcb;
 	cpu_t* cpu =  proceso->clienteCPU;
 
-	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo.");
+	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo, proceso: %i.", pcb->processID);
 
 	//Envio el proceso que va a correr despues
 	int tamanioPaquete = sizeof(int) * 4 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
+	log_debug(archivoLogDebug, "Pase el malloc de paquete");
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
 
+	log_debug(archivoLogDebug, "CPU que ejecuta el proceso: %i", cpu->cliente);
 	send(cpu->cliente, paquete, tamanioPaquete, 0);
 
 	free(paquete);
 	
-	int formaFinalizacion = malloc(sizeof(int));
+	int formaFinalizacion;
 	recibirYDeserializarInt(&formaFinalizacion, cpu->cliente);
-	log_debug(archivoLogDebug,"forma de finalizacion:%d",formaFinalizacion);
+	log_debug(archivoLogDebug,"forma de finalizacion:%d", formaFinalizacion);
 
 	switch(formaFinalizacion){
 
@@ -549,31 +615,32 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 			break;
 		}
-		case PROCESOBLOQUEADO:{
+		case ENTRADASALIDA:{
 
 			log_info(archivoLog, "Entré al case PROCESOBLOQUEADO");
 			log_debug(archivoLogDebug, "Entré al case PROCESOBLOQUEADO");
+
 			int programCounter;
 			recibirYDeserializarInt(&programCounter, cpu->cliente);
+			log_debug(archivoLogDebug, "program counter:%i", programCounter);
 
 			int tiempoBloqueado;
 			recibirYDeserializarInt(&tiempoBloqueado, cpu->cliente);
+			log_debug(archivoLogDebug, "tiempo bloqueado:%i", tiempoBloqueado);
 
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
-			log_info(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.",resultadoRafaga);
 
 			free(resultadoRafaga);
 
-			pthread_mutex_lock(&mutexQueueBlocked);
-
-			finalizarRafaga(pcb, queueBlocked, &tiempoBloqueado);
-			pthread_mutex_unlock(&mutexQueueBlocked);
-
 			pcb->estadoProceso = BLOCKED;
 			pcb->programCounter = programCounter;
+
+			pthread_mutex_lock(&mutexQueueBlocked);
+			finalizarRafaga(pcb, queueBlocked, &tiempoBloqueado);
+			pthread_mutex_unlock(&mutexQueueBlocked);
 
 			log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
 
@@ -587,17 +654,20 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
 			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
-			log_debug(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
 			free(resultadoRafaga);
 
+			int* numeroProceso = malloc(sizeof(int));
+			*numeroProceso = pcb->processID;
+
 			pthread_mutex_lock(&mutexQueueReady);
-			log_info(archivoLog, "por finalizar rafaga");
+			log_debug(archivoLogDebug, "por finalizar rafaga");
 			finalizarRafaga(pcb, NULL, NULL);
-			log_info(archivoLog, "Despúes de finalizasizar rafaga");
+			log_debug(archivoLogDebug, "Despúes de finalizasizar rafaga");
 			pthread_mutex_unlock(&mutexQueueReady);
 
-			log_info(archivoLog, "Finaliza el proceso %i.\n", pcb->processID);
+			log_debug(archivoLogDebug, "Finaliza el proceso %i.", *numeroProceso);
 
 			break;
 		}
@@ -608,10 +678,12 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	cpu_t* cpuAux;
 	t_queue* queueAux;
 
+	queueAux = queue_create();
+
 	while(!queue_is_empty(queueCPU)){
 		cpuAux = queue_pop(queueCPU);
-		if(cpuAux->numeroCPU == proceso->clienteCPU->numeroCPU){
-			queue_push(queueCPULibre, &proceso->clienteCPU);
+		if(cpuAux->numeroCPU == cpu->numeroCPU){
+			queue_push(queueCPULibre, cpuAux);
 		}else{
 			queue_push(queueAux, cpuAux);
 		}
@@ -624,7 +696,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	pthread_mutex_unlock(&mutexQueueCPU);
 	pthread_mutex_unlock(&mutexQueueCPULibre);
 
-	free(proceso);
+	queue_destroy(queueAux);
 }
 
 void esperarConexiones(){

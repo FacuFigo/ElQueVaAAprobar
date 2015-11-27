@@ -37,7 +37,6 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
-	PROCESOBLOQUEADO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -61,7 +60,6 @@ void iniciarmProc(int pID, int cantPaginas);
 void leermProc(int pID, int nroPagina);
 void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
-void entradaSalidamProc();
 
 int main(int argc, char** argv) {
 
@@ -97,19 +95,18 @@ int main(int argc, char** argv) {
 
 	// Empiezo a probar con multihilos
 
-	pthread_t hilos[cantidadHilos];
+	pthread_t hilos;
 
-	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
-		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
+	for(threadCounter = 0; threadCounter < cantidadHilos; threadCounter++ ){
+		pthread_create(&hilos, NULL, (void *) ejecutarmProc, NULL);
 		log_info(archivoLog, "Instancia de CPU %i creada.\n", threadCounter);
 	}
 
-	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
-		pthread_join(hilos[threadCounter],NULL);//se saco el join --> buscar un super join
-		log_info(archivoLog, "Termino hilo de CPU %i", threadCounter);
+	for(threadCounter = 0; threadCounter < cantidadHilos; threadCounter++ ){
+		pthread_join(hilos,NULL);
 	}
-	return 0;
 
+	return 0;
 }
 
 void configurarCPU(char* config) {
@@ -187,15 +184,6 @@ void escribirmProc(int pID, int nroPagina, char* texto){
 
 }
 
-void entradaSalidamProc(int pID, int tiempo){
-	int tamPaquete= sizeof(int)*3;
-	char* paquete= malloc(tamPaquete);
-	serializarInt(serializarInt(serializarInt(paquete, ENTRADASALIDA), pID), tiempo);
-	send(socketPlanificador, paquete, tamPaquete, 0);
-	free(paquete);
-}
-
-
 void ejecutarmProc() {
 	FILE* mCod;
 	int pID;
@@ -206,37 +194,32 @@ void ejecutarmProc() {
 	char comandoLeido[30]; //a cambiar en posteriores checkpoints
 	char* instruccion;
 	char* paqueteRafaga;
-	operacion_t operacion;
+	int operacion;
 	int entradaSalida;
 	int quantumRafaga;
 	int valor;
 	quantumRafaga = quantum;
+	int socketPlaniHilo;
 
-	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
-				&socketPlanificador))
-			log_info(archivoLog, "Conectado al Planificador %i.\n",
-					socketPlanificador);
-		else
-			log_error(archivoLog, "Error al conectar con Planificador. %s\n",
-					ipPlanificador);
+	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlaniHilo))
+		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlaniHilo);
+	else
+		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
 	while(1){
 		entradaSalida=0;
 		char* resultadosTot = string_new();
-		recibirYDeserializarInt(&operacion, socketPlanificador);
+		log_info(archivoLog, "Quedo esperando, cpu: %i", process_get_thread_id());
+		recibirYDeserializarInt(&operacion, socketPlaniHilo);
 		log_info(archivoLog, "Recibi operacion %i.\n", operacion);
-		recibirYDeserializarInt(&pID, socketPlanificador);
+		recibirYDeserializarInt(&pID, socketPlaniHilo);
 		log_info(archivoLog, "Recibi pid %i.\n", pID);
-		recibirYDeserializarInt(&programCounter, socketPlanificador);
+		recibirYDeserializarInt(&programCounter, socketPlaniHilo);
 		log_info(archivoLog, "Recibi program counter %i.\n", programCounter);
-		recibirYDeserializarChar(&path, socketPlanificador);
+		recibirYDeserializarChar(&path, socketPlaniHilo);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
-
 		mCod=fopen(path,"r");
-
-
-
 
 		do {
 			fgets(comandoLeido, 30, mCod);
@@ -310,7 +293,7 @@ void ejecutarmProc() {
 			}
 			if (string_equals_ignore_case(instruccion, "entrada-salida")) {
 				tiempoIO= valor;
-				entradaSalidamProc(pID, tiempoIO);
+
 				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
 				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
@@ -327,6 +310,7 @@ void ejecutarmProc() {
 					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
 					char* aux = string_from_format("mProc %d finalizado",pID);
 					string_append(&resultadosTot, aux);
+					free(aux);
 				} else {
 					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
 				}
@@ -349,13 +333,18 @@ void ejecutarmProc() {
 
 		log_info(archivoLog, "NUMERO FUERA DEL WHILE: %d",operacion);
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
-		//free(comandoLeido);
 
 		fclose(mCod);
-		tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
-		paqueteRafaga = malloc(tamanioPaquete);
-		serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot); //pID, formaDeFinalizacion
-		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
+		if (operacion == ENTRADASALIDA) { //entra aca si es entrada-salida, o al else si es otra
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*4;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(serializarInt(serializarInt(paqueteRafaga, operacion),programCounter),tiempoIO), resultadosTot);
+		} else {
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
+		}
+		send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
 
