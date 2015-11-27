@@ -130,8 +130,8 @@ int main(int argc, char** argv) {
 	system("rm log_Debug");
 
 	//Creo el archivo de logs
-	archivoLogObligatorio = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
-	archivoLog = log_create("log_planificador", "planificador", 0, LOG_LEVEL_TRACE);
+	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
+	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
 	pthread_t hiloEntradaSalida;
 	pthread_create(&hiloEntradaSalida, NULL, (void *) entradaSalida, NULL);
 
-	log_info(archivoLog, algoritmo);
+	log_info(archivoLogObligatorio,"Comienza la ejecucion del algoritmo %s" , algoritmo);
 
 	//Comienza el thread del planificador
 	pthread_t hiloPlanificador;
@@ -513,15 +513,11 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
 	queueAux = queue_create();
 
-	log_debug(archivoLogDebug, "pase los malloc ");
 	while(!queue_is_empty(queueRunning)){
-		log_debug(archivoLogDebug, "por sacar aux en running");
 		aux = queue_pop(queueRunning);
-		log_debug(archivoLogDebug,"Saco aux en running");
 		if(pcb->processID == aux->processID){
 
 			if(tiempoBlocked != NULL){
-				log_debug(archivoLogDebug, "entre al if");
 				procesoBlocked_t* proceso = malloc(sizeof(procesoBlocked_t));
 				proceso->tiempoDormido = *tiempoBlocked;
 				proceso->pcb = pcb;
@@ -530,7 +526,6 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 				break;
 			}
 
-			log_debug(archivoLogDebug, "sali del if");
 
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
 			if(colaDestino != NULL)
@@ -538,9 +533,7 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 
 			break;
 		} else {
-			log_debug(archivoLogDebug,"entre donde la cola destino no es null");
 			queue_push(queueAux, aux);
-			log_debug(archivoLogDebug,"meti aux en queueAux");
 		}
 	}
 
@@ -548,11 +541,8 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 	while(!queue_is_empty(queueAux)){
 
 		pthread_mutex_lock(&mutexQueueRunning);
-		log_debug(archivoLogDebug, "la cola de Figo no esta vacia");
 		aux = queue_pop(queueAux);
-		log_debug(archivoLogDebug,"saque aux de queueAux");
 		queue_push(queueRunning, aux);
-		log_debug(archivoLogDebug, "Meti aux en queueRunning");
 		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 
@@ -622,6 +612,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			free(resultadoRafaga);
 
 			pthread_mutex_lock(&mutexQueueReady);
+			log_info(archivoLogObligatorio, "Rafaga de cpu %i completada para el proceso mProc %i", cpu->numeroCPU, pcb->processID);
 			finalizarRafaga(pcb, queueReady, NULL);
 			pthread_mutex_unlock(&mutexQueueReady);
 
@@ -679,11 +670,10 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			*numeroProceso = pcb->processID;
 
 			pthread_mutex_lock(&mutexQueueReady);
+			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s.\n ", *numeroProceso, pcb->path);
+			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 			finalizarRafaga(pcb, NULL, NULL);
 			pthread_mutex_unlock(&mutexQueueReady);
-
-			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s./n", pcb->processID, pcb->path);
-			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 
 			break;
 		}
@@ -725,7 +715,7 @@ void esperarConexiones(){
 	struct sockaddr_storage direccionCliente;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPUPadre = accept(listeningSocket, (void*) &direccionCliente, &len);
-	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
+	log_info(archivoLogObligatorio, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
 
 	//Envio el quantum a CPU
 	char* paquete = malloc(sizeof(int));
@@ -749,6 +739,7 @@ void esperarConexiones(){
 		cpu->cliente = accept(listeningSocket, (void*) &direccionCliente, &len);
 		cpu->numeroCPU = i;
 		log_debug(archivoLogDebug, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
+		log_info(archivoLogObligatorio, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
 
 		//El cliente CPU va a ser la posición i del array de clientes, entonces lo podria usar desde el array mismo
 		queue_push(queueCPULibre, cpu);
