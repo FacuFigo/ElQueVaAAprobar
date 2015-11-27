@@ -110,6 +110,8 @@ int tlbHabilitada();
 int buscarEnTLBYEscribir(int pid,int pagina,char* contenido);
 int buscarEnTLBYLeer(int pid,int pagina,char* contenido);
 int eliminarEntradaEnTLB(int pid, int pagina);
+void eliminarProcesoEnTLB(char* key, pagina_t* value);
+void agregarEntradaEnTLB(int pid, int pagina, int marco);
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -384,6 +386,7 @@ void iniciarProceso(int pid, int cantPaginas){
 int finalizarProceso(int pid){
 	t_dictionary* tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	dictionary_iterator(tablaDePaginas,(void*)desasignarMarcos);
+	dictionary_iterator(tablaDePaginas,(void*)eliminarProcesoEnTLB);
 	dictionary_remove_and_destroy(tablaDeProcesos,string_itoa(pid),(void*)tablaDePaginasDestroy);
 	//TODO eliminar de TLB
 	return 1;//o -1 en error
@@ -392,87 +395,91 @@ int finalizarProceso(int pid){
 int leerMemoria(int pid, int pagina, void*contenido){
 	int success;
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
-	pagina_t *process = dictionary_get(tablaDePaginas, string_itoa(pagina));
-	if (process->bitPresencia==0){//fallo de pagina
+	pagina_t *paginaALeer = dictionary_get(tablaDePaginas, string_itoa(pagina));
+	if (paginaALeer->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
-					process->nroMarco = asignarNuevoMarco();
+					paginaALeer->nroMarco = asignarNuevoMarco();
 		}else{
 			//reemplaza un marco
 			int paginaAReemplazar= paginaAReemplazarPorAlgoritmo(tablaDePaginas);
 			pagina_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
-			process->nroMarco=victima->nroMarco;
+			paginaALeer->nroMarco=victima->nroMarco;
 			victima->bitPresencia=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
-			if (!eliminarEntradaEnTLB(pid,pagina))
-				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,victima->nroMarco);
+			if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
+				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
 			if(victima->bitModificado==1){
 				void* aux = malloc(tamanioMarco);
-				memcpy(aux,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
+				memcpy(aux,memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,tamanioMarco);
 				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
 			}
 			success = leerDeSwap(pid,pagina,&contenido);
-			memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,contenido,tamanioMarco);
+			memcpy(memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,contenido,tamanioMarco);
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}else
-		memcpy(contenido,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
-	process->bitModificado=0;
-	process->bitPresencia=1;
-	process->tiempoLRU=1;
+		memcpy(contenido,memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,tamanioMarco);
+	//paginaALeer->bitModificado=0;
+	paginaALeer->bitPresencia=1;
+	paginaALeer->tiempoLRU=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
-	//dictionary_put(tablaDePaginas,string_itoa(pagina),process);
+	//dictionary_put(tablaDePaginas,string_itoa(pagina),paginaALeer);
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
+	agregarEntradaEnTLB(pid, pagina, paginaALeer->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
 	return success;
 }
 
 
 int escribirMemoria(int pid, int pagina, void* contenido){
 	int success=1;
-	void *paginaAEscribir = calloc(1,tamanioMarco);
+	void *marcoAEscribir = calloc(1,tamanioMarco);
 	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
-	pagina_t *process = dictionary_get(tablaDePaginas, string_itoa(pagina));
-	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",process->nroMarco);
-	if (process->bitPresencia==0){//fallo de pagina
+	pagina_t *paginaAEscribir = dictionary_get(tablaDePaginas, string_itoa(pagina));
+	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",paginaAEscribir->nroMarco);
+	if (paginaAEscribir->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
 			log_info(archivoLog,"Antes de asignar un marco nuevo\n");
-			process->nroMarco = asignarNuevoMarco();
-			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",process->nroMarco);
+			paginaAEscribir->nroMarco = asignarNuevoMarco();
+			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",paginaAEscribir->nroMarco);
 		}else{//reemplaza un marco
 			log_info(archivoLog,"Empieza el algoritmo de reemplazo\n");
 			int paginaAReemplazar = paginaAReemplazarPorAlgoritmo(tablaDePaginas);
+			log_info(archivoLog,"Encontrada victima para reemplazo, pagina: %i",paginaAReemplazar);
 			pagina_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
-			process->nroMarco=victima->nroMarco;
+			paginaAEscribir->nroMarco=victima->nroMarco;
 			victima->bitPresencia=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
-			if (!eliminarEntradaEnTLB(pid,pagina))
-				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,victima->nroMarco);
+			if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
+				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
 			if(victima->bitModificado==1){
+				log_info(archivoLog,"El bit modificado es 1 y mando a escribir a swap");
 				void* aux = malloc(tamanioMarco);
-				memcpy(aux,memoriaPrincipal+process->nroMarco*tamanioMarco,tamanioMarco);
+				memcpy(aux,memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,tamanioMarco);
 				success=escribirEnSwap(aux,pid,pagina);
 				victima->bitModificado=0;
 			}
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}
-	log_info(archivoLog,"Antes del memcpy en memoria principal, strlen de contenido: %i,%i.\n",memoriaPrincipal+process->nroMarco*tamanioMarco,memoriaPrincipal);
-	memcpy(paginaAEscribir,contenido,strlen(contenido));//tamanioContenido
+	log_info(archivoLog,"Antes del memcpy en memoria principal, strlen de contenido: %i,%i.\n",memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,memoriaPrincipal);
+	memcpy(marcoAEscribir,contenido,strlen(contenido));//tamanioContenido
 
-	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",paginaAEscribir,strlen(paginaAEscribir));
-	memcpy(memoriaPrincipal+process->nroMarco*tamanioMarco,paginaAEscribir,tamanioMarco);
+	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",marcoAEscribir,strlen(marcoAEscribir));
+	memcpy(memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,marcoAEscribir,tamanioMarco);
 	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",memoriaPrincipal,strlen(memoriaPrincipal));
-	process->bitModificado=1;
-	process->bitPresencia=1;
-	process->tiempoLRU=1;
-	process->tiempoFIFO=1;
+	paginaAEscribir->bitModificado=1;
+	paginaAEscribir->bitPresencia=1;
+	paginaAEscribir->tiempoLRU=1;
+	paginaAEscribir->tiempoFIFO=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),process); ahora es innecesario
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
+	agregarEntradaEnTLB(pid, pagina, paginaAEscribir->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
 	return success;// debería devolver -1 en error
 }
 
@@ -532,6 +539,7 @@ void paginaDestroy(pagina_t* pagina){
 }
 
 int escribirEnSwap(char *contenido,int pid, int pagina){
+	log_info(archivoLog,"Entre a escribirEnSwap");
 	int tamanioPaquete, verificador;
 	char *paquete;
 	tamanioPaquete = sizeof(int) * 4+strlen(contenido)+1;
@@ -644,13 +652,34 @@ int eliminarEntradaEnTLB(int pid, int pagina){
 				marcoTLB = aux->marco;
 				tlbHit =1;
 				pos = i;
-				log_info(archivoLog,"Eliminada entrada en TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 			}
 			i++;
 		}
 	if (tlbHit){
 		entradaTLB_t *aux = list_remove(tlb,pos);
+		log_info(archivoLog,"Eliminada entrada en TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 		free(aux);
 	}
 	return tlbHit;
+}
+
+void eliminarProcesoEnTLB(char* key, pagina_t* value) {
+   if(value->bitPresencia==1)
+	 eliminarEntradaEnTLB(value->processID,strtol(key,NULL,10));
+}
+
+void agregarEntradaEnTLB(int pid, int pagina, int marco){
+	entradaTLB_t *nuevaEntrada = malloc(sizeof(entradaTLB_t));
+	nuevaEntrada->marco=marco;
+	nuevaEntrada->pid=pid;
+	nuevaEntrada->pagina=pagina;
+
+	if(list_size(tlb)==entradasTLB){
+		entradaTLB_t *aux = list_remove(tlb,0);
+		log_info(archivoLog,"Reemplazo una entrada en la TLB");
+		log_info(archivoLog,"Elimino la entrada pid: %i, pagina: %i, marco: %i",aux->pid,aux->pagina,aux->marco);
+		free(aux);
+	}
+	log_info(archivoLog,"Agrego una nueva entrada en la TLB pid: %i, marco: %i, marco: %i",nuevaEntrada->pid, nuevaEntrada->pagina, nuevaEntrada->marco);
+	list_add(tlb,nuevaEntrada);
 }
