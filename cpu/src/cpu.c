@@ -220,9 +220,16 @@ void ejecutarmProc() {
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
 		mCod=fopen(path,"r");
+//TODO SEEK PROGRAM CONTER STRIKE
+		//fgetpos(mCod, programCounter);
+		//fsetpos(mCod, programCounter);
+		int i;
+		for(i=0; programCounter>i; i++){
+			fgets(comandoLeido, 30, mCod);
+		}
 
 		do {
-			fgets(comandoLeido, 30, mCod);
+			fgets(comandoLeido, 30, mCod); //TODO cambiar el 30
 			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
 			char** leidoSplit = string_split(comandoLeido, " ");
@@ -240,14 +247,14 @@ void ejecutarmProc() {
 				int verificador;
 				recibirYDeserializarInt(&verificador, socketMemoria);
 				if (verificador != -1) {
-					log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d iniciado",	cantPaginas, pID);
-					char* aux = string_from_format("mProc %d - Iniciado", pID);
+					log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d iniciado.",	cantPaginas, pID);
+					char* aux = string_from_format("mProc %d - Iniciado.\n", pID);
 					string_append(&resultadosTot, aux);
 					free(aux);
 				}
 				else {
 					log_info(archivoLog,"Instruccion ejecutada:iniciar %d Proceso:%d. FALLO!",cantPaginas, pID);
-					char* aux = string_from_format("mProc %d - Fallo", pID);
+					char* aux = string_from_format("mProc %d - Fallo.\n", pID);
 					string_append(&resultadosTot, aux);
 					free(aux);
 				}
@@ -263,7 +270,7 @@ void ejecutarmProc() {
 					char* resultado = malloc(sizeof(char) * 25);
 					recibirYDeserializarChar(&resultado, socketMemoria);
 					log_info(archivoLog,"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",nroPagina, pID, resultado);
-					char* aux = string_from_format("mProc %d - Pagina %d leida: %s", pID, nroPagina, resultado);
+					char* aux = string_from_format("mProc %d - Pagina %d leida: %s.\n", pID, nroPagina, resultado);
 					string_append(&resultadosTot, aux);
 					free(resultado);
 					free(aux);
@@ -281,8 +288,8 @@ void ejecutarmProc() {
 				recibirYDeserializarInt(&verificador,socketMemoria);
 				if (verificador!= -1){
 					recibirYDeserializarChar(&texto,socketMemoria);
-					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s", nroPagina,texto, pID, texto);
-					char* aux= string_from_format("mProc %d - Pagina %d escrita:%s",pID, nroPagina, texto);
+					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s.\n", nroPagina,texto, pID, texto);
+					char* aux= string_from_format("mProc %d - Pagina %d escrita:%s.\n",pID, nroPagina, texto);
 					string_append(&resultadosTot, aux);
 					free(aux);
 				}
@@ -295,7 +302,7 @@ void ejecutarmProc() {
 				tiempoIO= valor;
 
 				log_info(archivoLog, "Instruccion ejecutada: entrada-salida %d Proceso: %d ", tiempoIO, pID);
-				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d", pID, tiempoIO);
+				char* aux= string_from_format("mProc %d en entrada-salida de tiempo %d.\n", pID, tiempoIO);
 				string_append(&resultadosTot, aux);
 				free(aux);
 				operacion = ENTRADASALIDA;
@@ -308,7 +315,7 @@ void ejecutarmProc() {
 				recibirYDeserializarInt(&verificador, socketMemoria);
 				if (verificador != -1) {
 					log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
-					char* aux = string_from_format("mProc %d finalizado",pID);
+					char* aux = string_from_format("mProc %d finalizado.\n",pID);
 					string_append(&resultadosTot, aux);
 					free(aux);
 				} else {
@@ -322,6 +329,7 @@ void ejecutarmProc() {
 			if (quantum != -1) {
 				quantumRafaga--;
 				if (quantumRafaga == 0) {
+					operacion = RAFAGAPROCESO;
 					break;  //este break puede no ir aca
 				}
 			}
@@ -335,15 +343,24 @@ void ejecutarmProc() {
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 
 		fclose(mCod);
+
 		if (operacion == ENTRADASALIDA) { //entra aca si es entrada-salida, o al else si es otra
 			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*4;
 			paqueteRafaga = malloc(tamanioPaquete);
 			serializarChar(serializarInt(serializarInt(serializarInt(paqueteRafaga, operacion),programCounter),tiempoIO), resultadosTot);
+		} else if(operacion == RAFAGAPROCESO) {
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*3;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(serializarInt(paqueteRafaga, operacion), programCounter), resultadosTot);
+			log_info(archivoLog, "ENVIO OPERACION %i.", operacion);
+			log_info(archivoLog, "ENVIO PROGRAMCOUNTER %i.", programCounter);
+			log_info(archivoLog, "ENVIO RESULTADOS TOTALES: %s", resultadosTot);
 		} else {
 			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 			paqueteRafaga = malloc(tamanioPaquete);
 			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
 		}
+
 		send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
