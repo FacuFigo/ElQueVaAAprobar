@@ -45,8 +45,8 @@ typedef enum {
 	RAFAGAPROCESO = 6,
 	PEDIDOMETRICA = 8
 } operacion_t;
-
 t_log* archivoLog;
+t_log* archivoLogObligatorio;
 t_log* archivoLogDebug;
 
 int puertoEscucha;
@@ -130,7 +130,8 @@ int main(int argc, char** argv) {
 	system("rm log_Debug");
 
 	//Creo el archivo de logs
-	archivoLog = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
+	archivoLogObligatorio = log_create("log_Planificador", "Planificador", 0, LOG_LEVEL_TRACE);
+	archivoLog = log_create("log_planificador", "planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
@@ -427,20 +428,36 @@ void logueoEstados(t_queue* cola){
 }
 
 void comandoCPU(){
-	//Envio la peticion a cpu de metrica, cantidad cpus ponerla global e ir mostrando. 1 for para send y recv
+	t_queue* queueAux;
+	cpu_t* cpu;
 	int tamanioPaquete = sizeof(int);
 	char* paquete = malloc(tamanioPaquete);
-
+	queueAux = queue_create();
 	serializarInt(paquete, PEDIDOMETRICA);
 
-	send(clienteCPUPadre, paquete, tamanioPaquete, 0);
+	pthread_mutex_lock(&mutexQueueCPU);
+	while(!queue_is_empty(queueCPU)){
+		cpu = queue_pop(queueCPU);
+		send(cpu->cliente, paquete, tamanioPaquete, 0);
+		queue_push(queueAux, cpu);
+	}
 
 	free(paquete);
-	//recv(); ver si se lo mando a cada hilo de cpu asi voy mostrando.
+
+	while(!queue_is_empty(queueAux)){
+		cpu = queue_pop(queueAux);
+		queue_push(queueCPU, cpu);
+	}
+
+	queue_destroy(queueAux);
+	pthread_mutex_unlock(&mutexQueueCPU);
+
+	int paqueteMetrica;
+	recibirYDeserializarInt(&paqueteMetrica, cpu->cliente);
+
 }
 
 void planificador() {
-	log_info(archivoLog, "Empieza el thread planificador.\n");
 	log_debug(archivoLog, "Empieza el thread planificador.\n");
 
 	cpu_t* cpu = malloc(sizeof(cpu_t));
@@ -578,10 +595,9 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	int tamanioPaquete = sizeof(int) * 4 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
-	log_debug(archivoLogDebug, "Pase el malloc de paquete");
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
 
-	log_debug(archivoLogDebug, "CPU que ejecuta el proceso: %i", cpu->cliente);
+	log_info(archivoLogObligatorio, "Comienza la ejecución del proceso %i: %s", pcb->processID, pcb->path);
 	send(cpu->cliente, paquete, tamanioPaquete, 0);
 
 	free(paquete);
@@ -589,6 +605,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	int formaFinalizacion;
 	recibirYDeserializarInt(&formaFinalizacion, cpu->cliente);
 	log_debug(archivoLogDebug,"forma de finalizacion:%d", formaFinalizacion);
+
 
 	switch(formaFinalizacion){
 
@@ -662,12 +679,11 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			*numeroProceso = pcb->processID;
 
 			pthread_mutex_lock(&mutexQueueReady);
-			log_debug(archivoLogDebug, "por finalizar rafaga");
 			finalizarRafaga(pcb, NULL, NULL);
-			log_debug(archivoLogDebug, "Despúes de finalizasizar rafaga");
 			pthread_mutex_unlock(&mutexQueueReady);
 
-			log_debug(archivoLogDebug, "Finaliza el proceso %i.", *numeroProceso);
+			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s./n", pcb->processID, pcb->path);
+			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 
 			break;
 		}
