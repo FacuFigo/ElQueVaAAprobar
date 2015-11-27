@@ -95,19 +95,18 @@ int main(int argc, char** argv) {
 
 	// Empiezo a probar con multihilos
 
-	pthread_t hilos[cantidadHilos];
+	pthread_t hilos;
 
-	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
-		pthread_create(&hilos[threadCounter], NULL, (void *) ejecutarmProc, NULL);
+	for(threadCounter = 0; threadCounter < cantidadHilos; threadCounter++ ){
+		pthread_create(&hilos, NULL, (void *) ejecutarmProc, NULL);
 		log_info(archivoLog, "Instancia de CPU %i creada.\n", threadCounter);
 	}
-//TODO ver si funcan los hilos
-	for(threadCounter=1; threadCounter<=cantidadHilos; threadCounter++ ){
-		pthread_join(hilos[threadCounter],NULL);//se saco el join --> buscar un super join
-		log_info(archivoLog, "Termino hilo de CPU %i", threadCounter);
-	}
-	return 0;
 
+	for(threadCounter = 0; threadCounter < cantidadHilos; threadCounter++ ){
+		pthread_join(hilos,NULL);
+	}
+
+	return 0;
 }
 
 void configurarCPU(char* config) {
@@ -185,9 +184,6 @@ void escribirmProc(int pID, int nroPagina, char* texto){
 
 }
 
-
-
-
 void ejecutarmProc() {
 	FILE* mCod;
 	int pID;
@@ -198,37 +194,32 @@ void ejecutarmProc() {
 	char comandoLeido[30]; //a cambiar en posteriores checkpoints
 	char* instruccion;
 	char* paqueteRafaga;
-	operacion_t operacion;
+	int operacion;
 	int entradaSalida;
 	int quantumRafaga;
 	int valor;
 	quantumRafaga = quantum;
+	int socketPlaniHilo;
 
-	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
-				&socketPlanificador))
-			log_info(archivoLog, "Conectado al Planificador %i.\n",
-					socketPlanificador);
-		else
-			log_error(archivoLog, "Error al conectar con Planificador. %s\n",
-					ipPlanificador);
+	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlaniHilo))
+		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlaniHilo);
+	else
+		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
 	while(1){
 		entradaSalida=0;
 		char* resultadosTot = string_new();
-		recibirYDeserializarInt(&operacion, socketPlanificador);
+		log_info(archivoLog, "Quedo esperando, cpu: %i", process_get_thread_id());
+		recibirYDeserializarInt(&operacion, socketPlaniHilo);
 		log_info(archivoLog, "Recibi operacion %i.\n", operacion);
-		recibirYDeserializarInt(&pID, socketPlanificador);
+		recibirYDeserializarInt(&pID, socketPlaniHilo);
 		log_info(archivoLog, "Recibi pid %i.\n", pID);
-		recibirYDeserializarInt(&programCounter, socketPlanificador);
+		recibirYDeserializarInt(&programCounter, socketPlaniHilo);
 		log_info(archivoLog, "Recibi program counter %i.\n", programCounter);
-		recibirYDeserializarChar(&path, socketPlanificador);
+		recibirYDeserializarChar(&path, socketPlaniHilo);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
-
 		mCod=fopen(path,"r");
-
-
-
 
 		do {
 			fgets(comandoLeido, 30, mCod);
@@ -353,7 +344,7 @@ void ejecutarmProc() {
 			paqueteRafaga = malloc(tamanioPaquete);
 			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
 		}
-		send(socketPlanificador, paqueteRafaga, tamanioPaquete, 0);
+		send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
 
