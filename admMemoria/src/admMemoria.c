@@ -104,7 +104,7 @@ void tablaDePaginasDestroy(t_dictionary *tablaDePaginas);
 void paginaDestroy(pagina_t *pagina);
 void desasignarMarcos(char *key, pagina_t* value);
 int escribirEnSwap(char *contenido,int pid, int pagina);
-int leerDeSwap(int pid, int pagina,void** contenido);
+int leerDeSwap(int pid, int pagina,char* contenido);
 int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas);
 int tlbHabilitada();
 int buscarEnTLBYEscribir(int pid,int pagina,char* contenido);
@@ -415,7 +415,8 @@ int leerMemoria(int pid, int pagina, void*contenido){
 				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
 			}
-			success = leerDeSwap(pid,pagina,&contenido);
+			success = leerDeSwap(pid,pagina,contenido);
+			log_info(archivoLog,"Contenido de swap es: %s",contenido);
 			memcpy(memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,contenido,tamanioMarco);
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
@@ -459,7 +460,7 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 				log_info(archivoLog,"El bit modificado es 1 y mando a escribir a swap");
 				void* aux = malloc(tamanioMarco);
 				memcpy(aux,memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,tamanioMarco);
-				success=escribirEnSwap(aux,pid,pagina);
+				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
 			}
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
@@ -556,7 +557,7 @@ int escribirEnSwap(char *contenido,int pid, int pagina){
 
 }
 
-int leerDeSwap(int pid, int pagina,void** contenido){
+int leerDeSwap(int pid, int pagina,char* contenido){
 	int tamanioPaquete, verificador;
 	char *paquete;
 	tamanioPaquete = sizeof(int) * 3;
@@ -570,8 +571,14 @@ int leerDeSwap(int pid, int pagina,void** contenido){
 
 	recibirYDeserializarInt(&verificador, socketSwap);
 	if (verificador != -1){
-		recibirYDeserializarChar(&contenido,socketSwap);
-		log_info(archivoLog, "Página %i leida de Swap: %s",pagina,contenido);
+			int buffer_size;
+			char *buffer = malloc(buffer_size = sizeof(uint32_t));
+			uint32_t message_long;
+			recv(socketSwap, buffer, buffer_size, 0);
+			memcpy(&(message_long), buffer, buffer_size);
+			recv(socketSwap, contenido, message_long, 0);
+			free(buffer);
+			log_info(archivoLog, "Página %i leida de Swap: %s",pagina,contenido);
 	}else
 		log_info(archivoLog, "Error al traer página: %i de Swap",pagina);
 	return verificador;

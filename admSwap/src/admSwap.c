@@ -155,7 +155,6 @@ int main(int argc, char** argv) {
 		list_add(listaGestionEspacios, pagina);
 		//Para saber si se está creando de forma correcta
 		//log_debug(logDebug, "N° pagina: %i, Disponibilidad: %i, Proceso: %i", pagina->numeroPagina, pagina->disponibilidad, pagina->proceso);
-		free(pagina);
 	}
 
 	//Thread que gestiona los espacios en la lista de gestion
@@ -284,8 +283,6 @@ void admDeEspacios(){
 
 			case FINALIZARPROCESO:{
 
-				log_debug(logDebug, "Antes de recibir.");
-
 				recibirYDeserializarInt(&proceso->processID, clienteMemoria);
 
 				char* paquete = malloc(sizeof(int));
@@ -321,6 +318,8 @@ void admDeEspacios(){
 
 				char* contenidoPagina = malloc(tamanioPagina);
 				int resultado = leerPagina(*pid, *paginaALeer, contenidoPagina);
+
+				log_debug(logDebug,"Contenido leido: %s",contenidoPagina);
 
 				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
 				char* paquete = malloc(tamanioPaquete);
@@ -440,9 +439,9 @@ void asignarEspacio(int paginaInicio, process_t* proceso){
 		//Asigno No Disponible y el ID del Proceso que la ocupa
 		pagina->disponibilidad = 0;
 		pagina->proceso = proceso->processID;
-
+		log_debug(logDebug, "Pagina asignada: %i, proceso: %i.", pagina->numeroPagina, pagina->proceso);
 		paginaALeer++;
-		pagina = list_get(listaGestionEspacios, paginaInicio);
+		pagina = list_get(listaGestionEspacios, paginaALeer);
 
 	}
 
@@ -463,7 +462,6 @@ int liberarMemoria(int pid){
 
 	while(pagina->proceso == pid){
 
-		log_debug(logDebug, "Encontro la pagina inicial para liberar.");
 		liberarEspacioEnArchivo(pagina->numeroPagina);
 
 		pagina->disponibilidad = 1;
@@ -505,11 +503,12 @@ int leerPagina(int pid, int numeroPagina, char* contenidoLeido){
 
 			int posicion = pagina->numeroPagina * tamanioPagina;
 
-			fseek(archivoSwap, posicion, SEEK_SET);
+			if(!fseek(archivoSwap, posicion, SEEK_SET))
+				log_debug(logDebug, "Funciono el seek, posicion: %i.", posicion);
 
 			fgets(contenidoLeido, tamanioPagina, archivoSwap);
 
-			//string_trim(&contenido);
+			log_debug(logDebug, "Pagina: %i, Proceso: %i, Posicion: %i, Contenido leido: %s.", pagina->numeroPagina, pagina->proceso, posicion, contenidoLeido);
 
 			return 1;
 		}else{
@@ -527,36 +526,45 @@ int leerPagina(int pid, int numeroPagina, char* contenidoLeido){
 int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 	int numero = 0;
 	pagina_t* pagina;
-	int paginaProceso;
+	int paginaProceso = 0;
 
+	log_debug(logDebug, "Pagina a escribir: %i", paginaAEscribir);
 	pagina = list_get(listaGestionEspacios, numero);
 	while(pagina->proceso != pid){
 		numero++;
 		pagina = list_get(listaGestionEspacios, numero);
 	}
 
+	log_debug(logDebug, "Salgo del primer while, proceso: %i - pid: %i.", pagina->proceso, pid);
+
 	while(pagina->proceso == pid){
 
+		log_debug(logDebug, "Pagina: %i, pagina proceso: %i", pagina->numeroPagina, paginaProceso);
+
 		if(paginaProceso == paginaAEscribir){
+			log_debug(logDebug, "Se encontro la pagina a escribir: %i, contenido a escribir: %s.", pagina->numeroPagina, contenido);
 
 			int posicion = pagina->numeroPagina * tamanioPagina;
 
 			fseek(archivoSwap, posicion, SEEK_SET);
 
-			int diferencia = tamanioPagina - strlen(contenido);
-			char* vacios = calloc(diferencia, sizeof(char));
+			//int diferencia = tamanioPagina - strlen(contenido);
+			//char* vacios = calloc(diferencia, sizeof(char));
 
 			fputs(contenido, archivoSwap);
-			fputs(vacios, archivoSwap);
+			log_debug(logDebug, "Se realizo la escritura con el fputs.");
+			//fputs(vacios, archivoSwap);
 
-			free(vacios);
+			log_debug(logDebug, "Se pudo escribir la pagina: %i.", pagina->numeroPagina);
+			//free(vacios);
 
 			return 1;
 
 		}else{
-			paginaProceso++;
 			numero++;
+			paginaProceso++;
 			pagina = list_get(listaGestionEspacios, numero);
+			log_debug(logDebug, "Pagina siguiente: %i, Proceso: %i.", pagina->numeroPagina, pagina->proceso);
 		}
 
 	}
