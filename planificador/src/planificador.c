@@ -359,35 +359,60 @@ void estadoProcesos(){
 
 	// Me voy fijando si las colas no son vacias, saco a variable aux y logueo
 	if(!queue_is_empty(queueReady)){
+		pthread_mutex_lock(&mutexQueueReady);
 		logueoEstados(queueReady);
-
+		pthread_mutex_unlock(&mutexQueueReady);
 	}
 	if(!queue_is_empty(queueBlocked)){
+		pthread_mutex_lock(&mutexQueueBlocked);
 		logueoEstados(queueBlocked);
+		pthread_mutex_unlock(&mutexQueueBlocked);
 	}
 	if(!queue_is_empty(queueRunning)){
+		pthread_mutex_lock(&mutexQueueRunning);
 		logueoEstados(queueRunning);
+		pthread_mutex_unlock(&mutexQueueRunning);
 	}
 	log_debug(archivoLogDebug, "Estados logueados, saliendo de ps");
 }
 
 void logueoEstados(t_queue* cola){
 
-	pcb_t* aux = malloc(sizeof(pcb_t));
+	pcb_t* pcb = malloc(sizeof(pcb_t));
 	t_queue* queueAux;
 	queueAux = queue_create();
 
 	while(!queue_is_empty(cola)){
-		aux = queue_pop(cola);
-		log_debug(archivoLogDebug, "mProc %i: %s -> %s", aux->processID, aux->path, aux->estadoProceso);
-		queue_push(queueAux, aux);
+		pcb = queue_pop(cola);
+		switch (pcb->estadoProceso){
+
+			case READY:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Listo", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+			case RUNNING:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Ejecutando", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+			case BLOCKED:{
+				log_debug(archivoLogDebug, "mProc %i: %s -> Bloqueado", pcb->processID, pcb->path);
+				queue_push(queueAux, pcb);
+				break;
+			}
+
+
+		}
 	}
 
 	while(!queue_is_empty(queueAux)){
-		aux = queue_pop(queueAux);
-		queue_push(cola, aux);
+		pcb = queue_pop(queueAux);
+		queue_push(cola, pcb);
 	}
-	free(aux);
+	free(pcb);
 	queue_destroy(queueAux);
 }
 
