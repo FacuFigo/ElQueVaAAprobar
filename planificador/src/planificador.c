@@ -215,22 +215,32 @@ void manejoDeConsola() {
 	int mantenerConsola = 1;
 
 	while (mantenerConsola) {
-		//scanf("%s %s", comando.comando, comando.parametro);
-		//getchar();
 
 		comando_t comando;
 
 		comando.comando = malloc(10);
 		comando.parametro = malloc(50);
 
-		char* comandoLeido = malloc(20);
-		fgets(comandoLeido, 20, stdin);
+		char* comandoLeido = malloc(25);
+		fgets(comandoLeido, 25, stdin);
 
 		char** comandoSplit = string_n_split(comandoLeido, 2, " ");
+		log_debug(archivoLogDebug, "Hace el split.");
 		comando.comando = comandoSplit[0];
-		comando.parametro = comandoSplit[1];
 
-		log_debug(archivoLogDebug, "Comando leido: %s", comando.comando);
+		if(comandoSplit[1] != NULL){
+			comando.parametro = comandoSplit[1];
+			log_debug(archivoLogDebug, "Hace las asignaciones.");
+
+			char* nuevaLinea;
+			nuevaLinea = strchr(comando.parametro, 10);
+			log_debug(archivoLogDebug, "Hace strchr.");
+
+			if (nuevaLinea != NULL)
+				*nuevaLinea = '\0';
+
+			log_debug(archivoLogDebug, "Cambia la nueva linea por vacio.");
+		}
 
 		if (string_starts_with(comando.comando, "correr")) {
 				correrProceso(comando.parametro);
@@ -571,6 +581,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	log_debug(archivoLogDebug, "Pase el malloc de paquete");
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
 
+	log_debug(archivoLogDebug, "CPU que ejecuta el proceso: %i", cpu->cliente);
 	send(cpu->cliente, paquete, tamanioPaquete, 0);
 
 	free(paquete);
