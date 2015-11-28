@@ -319,9 +319,9 @@ void admDeEspacios(){
 				char* contenidoPagina = malloc(tamanioPagina);
 				int resultado = leerPagina(*pid, *paginaALeer, contenidoPagina);
 
-				log_debug(logDebug,"Contenido leido: %s",contenidoPagina);
+				log_debug(logDebug,"Contenido leido: %s y el strlen es: %i",contenidoPagina,strlen(contenidoPagina));
 
-				tamanioPaquete = tamanioPagina + sizeof(int) * 2;
+				tamanioPaquete = strlen(contenidoPagina)+1 + sizeof(int) * 2;
 				char* paquete = malloc(tamanioPaquete);
 
 				if(resultado == 1){

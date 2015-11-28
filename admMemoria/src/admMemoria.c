@@ -587,14 +587,16 @@ int leerDeSwap(int pid, int pagina,char* contenido){
 
 	recibirYDeserializarInt(&verificador, socketSwap);
 	if (verificador != -1){
+			int status;
 			int buffer_size;
 			char *buffer = malloc(buffer_size = sizeof(uint32_t));
 			uint32_t message_long;
-			recv(socketSwap, buffer, buffer_size, 0);
-			memcpy(&(message_long), buffer, buffer_size);
-			recv(socketSwap, contenido, message_long, 0);
+			status = recv(socketSwap, buffer, buffer_size, 0);
+			memcpy(&message_long, buffer, buffer_size);
+			log_info(archivoLog, "El mesaje_long que manda Swap es: %i y el status es: %i",message_long,status);
+			status = recv(socketSwap, contenido, message_long, 0);
 			free(buffer);
-			log_info(archivoLog, "Página %i leida de Swap: %s",pagina,contenido);
+			log_info(archivoLog, "Página %i leida de Swap: %s y el status es: %i",pagina,contenido, status);
 	}else
 		log_info(archivoLog, "Error al traer página: %i de Swap",pagina);
 	return verificador;
