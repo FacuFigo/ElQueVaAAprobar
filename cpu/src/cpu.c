@@ -329,7 +329,8 @@ void ejecutarmProc() {
 			if (quantum != -1) {
 				quantumRafaga--;
 				if (quantumRafaga == 0) {
-					operacion = RAFAGAPROCESO;
+					if (operacion != FINALIZARPROCESO)
+						operacion = RAFAGAPROCESO;
 					break;  //este break puede no ir aca
 				}
 			}
@@ -355,7 +356,7 @@ void ejecutarmProc() {
 			log_info(archivoLog, "ENVIO OPERACION %i.", operacion);
 			log_info(archivoLog, "ENVIO PROGRAMCOUNTER %i.", programCounter);
 			log_info(archivoLog, "ENVIO RESULTADOS TOTALES: %s", resultadosTot);
-		} else {
+		} else if(operacion == FINALIZARPROCESO){
 			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
 			paqueteRafaga = malloc(tamanioPaquete);
 			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);

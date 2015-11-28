@@ -260,7 +260,12 @@ void admDeMemoria(){
 			case LEERMEMORIA:{
 				int pid, pagina, tamanioPaquete, verificador, tlbHit=0;
 				char *paquete;
-				void* contenido = calloc(1,tamanioMarco);
+				//void* contenido = calloc(1,tamanioMarco);
+				void* contenido = malloc(tamanioMarco);
+				if(contenido == NULL)
+					log_info(archivoLog,"Error en el malloc");
+				memset(contenido,0,tamanioMarco);
+				log_info(archivoLog,"sizeof de contenido:%i",sizeof(contenido));
 				recibirYDeserializarInt(&pid, clienteCPU);
 				recibirYDeserializarInt(&pagina, clienteCPU);
 
@@ -378,6 +383,7 @@ void iniciarProceso(int pid, int cantPaginas){
 		nuevoProceso->bitPresencia = 0;
 		nuevoProceso->bitModificado = 0;
 		nuevoProceso->tiempoLRU = 0;
+		nuevoProceso->tiempoFIFO=0;
 		dictionary_put(nuevaTablaDePaginas,string_itoa(nroPagina),nuevoProceso);
 	}
 	dictionary_put(tablaDeProcesos,string_itoa(pid),nuevaTablaDePaginas);
@@ -386,7 +392,8 @@ void iniciarProceso(int pid, int cantPaginas){
 int finalizarProceso(int pid){
 	t_dictionary* tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	dictionary_iterator(tablaDePaginas,(void*)desasignarMarcos);
-	dictionary_iterator(tablaDePaginas,(void*)eliminarProcesoEnTLB);
+	if (tlbHabilitada())
+		dictionary_iterator(tablaDePaginas,(void*)eliminarProcesoEnTLB);
 	dictionary_remove_and_destroy(tablaDeProcesos,string_itoa(pid),(void*)tablaDePaginasDestroy);
 	//TODO eliminar de TLB
 	return 1;//o -1 en error
@@ -407,13 +414,16 @@ int leerMemoria(int pid, int pagina, void*contenido){
 			victima->bitPresencia=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
-			if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
-				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
+			if(tlbHabilitada()){
+				if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
+					log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
+			}
 			if(victima->bitModificado==1){
 				void* aux = malloc(tamanioMarco);
 				memcpy(aux,memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,tamanioMarco);
 				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
+				free(aux);
 			}
 			success = leerDeSwap(pid,pagina,contenido);
 			log_info(archivoLog,"Contenido de swap es: %s",contenido);
@@ -429,7 +439,8 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),paginaALeer);
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
-	agregarEntradaEnTLB(pid, pagina, paginaALeer->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
+	if(tlbHabilitada())
+		agregarEntradaEnTLB(pid, pagina, paginaALeer->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
 	return success;
 }
 
@@ -454,14 +465,17 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			victima->bitPresencia=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
-			if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
-				log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
+			if (tlbHabilitada()){
+				if (!eliminarEntradaEnTLB(pid,paginaAReemplazar))
+					log_info(archivoLog,"No habia entradas en la TLB para pid: %i, pagina: %i, marco: %i",pid,paginaAReemplazar,victima->nroMarco);
+			}
 			if(victima->bitModificado==1){
 				log_info(archivoLog,"El bit modificado es 1 y mando a escribir a swap");
 				void* aux = malloc(tamanioMarco);
 				memcpy(aux,memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,tamanioMarco);
 				success=escribirEnSwap(aux,pid,paginaAReemplazar);
 				victima->bitModificado=0;
+				free(aux);
 			}
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
@@ -474,13 +488,15 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",memoriaPrincipal,strlen(memoriaPrincipal));
 	paginaAEscribir->bitModificado=1;
 	paginaAEscribir->bitPresencia=1;
-	paginaAEscribir->tiempoLRU=1;
-	paginaAEscribir->tiempoFIFO=1;
+	paginaAEscribir->tiempoLRU=0;
+	//paginaAEscribir->tiempoFIFO=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),process); ahora es innecesario
 	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
-	agregarEntradaEnTLB(pid, pagina, paginaAEscribir->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
+	if(tlbHabilitada())
+		agregarEntradaEnTLB(pid, pagina, paginaAEscribir->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
+	free(marcoAEscribir);
 	return success;// debería devolver -1 en error
 }
 

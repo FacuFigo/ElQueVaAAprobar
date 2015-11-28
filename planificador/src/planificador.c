@@ -120,7 +120,8 @@ void comandoCPU();
 
 //Funciones de planificador
 int buscarYEliminarEnCola(t_queue* cola, int pid);
-void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
+//void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked);
+void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked);
 void entradaSalida();
 void procesoCorriendo(procesoCorriendo_t* proceso);
 void logueoEstados(t_queue* cola);
@@ -505,10 +506,10 @@ void planificador() {
 	free(cpu);
 }
 
-void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
+void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked){
 
 	log_debug(archivoLogDebug, "Entré a finalizar rafaga");
-	pcb_t* aux = malloc(sizeof(pcb_t));
+	pcb_t* aux;
 	t_queue* queueAux;
 
 	queueAux = queue_create();
@@ -518,19 +519,21 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 		if(pcb->processID == aux->processID){
 
 			if(tiempoBlocked != NULL){
+				log_debug(archivoLogDebug, "El proceso %i se bloquea.", pcb->processID);
 				procesoBlocked_t* proceso = malloc(sizeof(procesoBlocked_t));
 				proceso->tiempoDormido = *tiempoBlocked;
 				proceso->pcb = pcb;
-				queue_push(colaDestino, proceso);
-				free(proceso);
+				queue_push(queueBlocked, proceso);
 				break;
+			}else{
+				log_debug(archivoLogDebug, "El proceso %i va a la cola Ready.", pcb->processID);
+				queue_push(queueReady, pcb);
 			}
 
-
 			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			if(colaDestino != NULL)
+			/*if(colaDestino != NULL)
 				queue_push(colaDestino, pcb);
-
+*/
 			break;
 		} else {
 			queue_push(queueAux, aux);
@@ -547,7 +550,6 @@ void finalizarRafaga(pcb_t* pcb, t_queue* colaDestino, int* tiempoBlocked){
 	}
 
 	queue_destroy(queueAux);
-	free(aux);
 }
 
 //Al ser un KLT usar sleep y se clava solo el hilo
@@ -607,17 +609,15 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			char* resultadoRafaga;
 			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
 
-			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %i.\n",resultadoRafaga);
-
-			free(resultadoRafaga);
-
-			pthread_mutex_lock(&mutexQueueReady);
-			log_info(archivoLogObligatorio, "Rafaga de cpu %i completada para el proceso mProc %i", cpu->numeroCPU, pcb->processID);
-			finalizarRafaga(pcb, queueReady, NULL);
-			pthread_mutex_unlock(&mutexQueueReady);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
 			pcb->estadoProceso = READY;
 			pcb->programCounter = programCounter;
+
+			pthread_mutex_lock(&mutexQueueReady);
+			log_info(archivoLogObligatorio, "Rafaga de cpu %i completada para el proceso mProc %i", cpu->numeroCPU, pcb->processID);
+			finalizarRafaga(pcb, NULL);
+			pthread_mutex_unlock(&mutexQueueReady);
 
 			log_debug(archivoLogDebug, "Se acabo la rafaga de %i.\n", pcb->processID);
 
@@ -641,13 +641,11 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.",resultadoRafaga);
 
-			free(resultadoRafaga);
-
 			pcb->estadoProceso = BLOCKED;
 			pcb->programCounter = programCounter;
 
 			pthread_mutex_lock(&mutexQueueBlocked);
-			finalizarRafaga(pcb, queueBlocked, &tiempoBloqueado);
+			finalizarRafaga(pcb, &tiempoBloqueado);
 			pthread_mutex_unlock(&mutexQueueBlocked);
 
 			log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
@@ -664,17 +662,13 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
-			free(resultadoRafaga);
-
 			int* numeroProceso = malloc(sizeof(int));
 			*numeroProceso = pcb->processID;
 
-			pthread_mutex_lock(&mutexQueueReady);
 			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s.\n ", *numeroProceso, pcb->path);
 			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
-			finalizarRafaga(pcb, NULL, NULL);
-			pthread_mutex_unlock(&mutexQueueReady);
 
+			free(pcb);
 			break;
 		}
 	}
