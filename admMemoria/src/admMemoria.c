@@ -35,6 +35,7 @@
 #define BACKLOG 5
 
 t_log* archivoLog;
+t_log* archivoLogPrueba;
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -54,9 +55,11 @@ typedef enum{
 } algoritmo_t;
 
 typedef struct {
-	int processID;
+	int nroPagina;
+	int pid;
 	int nroMarco;
 	int bitPresencia;
+	int bitUso;
 	int bitModificado;
 	int tiempoLRU;
 	int tiempoFIFO;
@@ -85,6 +88,7 @@ int* marcos;
 algoritmo_t algoritmoDeReemplazo = FIFO;
 t_dictionary *tablaDeProcesos;
 t_list *tlb;
+t_list *punteroClockMejorado;
 
 typedef enum{iniciar, leer, escribir, entradaSalida, finalizar} t_instruccion;
 
@@ -115,7 +119,10 @@ void agregarEntradaEnTLB(int pid, int pagina, int marco);
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
+	system("rm log_prueba");
+
 	archivoLog = log_create("log_AdmMemoria", "AdmMemoria", 1, 0);
+	archivoLogPrueba = log_create("log_prueba", "AdmMemoria",0,0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
 
 	configurarAdmMemoria(argv[1]);
@@ -162,7 +169,14 @@ void configurarAdmMemoria(char* config) {
 		TLBHabilitada = string_duplicate(config_get_string_value(configurarAdmMemoria, "TLB_HABILITADA"));
 	if (config_has_property(configurarAdmMemoria, "RETARDO_MEMORIA"))
 		retardoMemoria = config_get_int_value(configurarAdmMemoria, "RETARDO_MEMORIA");
-
+	if (config_has_property(configurarAdmMemoria, "ALGORITMO_TLB")){
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"FIFO"))
+				algoritmoDeReemplazo = FIFO;
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"LRU"))
+				algoritmoDeReemplazo = LRU;
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"CLOCKMEJORADO"))
+				algoritmoDeReemplazo = CLOCKMEJORADO;
+	}
 	config_destroy(configurarAdmMemoria);
 }
 
@@ -376,11 +390,15 @@ void admDeMemoria(){
 void iniciarProceso(int pid, int cantPaginas){
 	t_dictionary* nuevaTablaDePaginas = dictionary_create();
 	int nroPagina;
+	if(algoritmoDeReemplazo==CLOCKMEJORADO)
+		punteroClockMejorado=list_create();
 	for (nroPagina=0;nroPagina < cantPaginas;nroPagina++){
 		pagina_t* nuevoProceso = malloc(sizeof(pagina_t));
-		nuevoProceso->processID = pid;
+		nuevoProceso->nroPagina=nroPagina;
+		nuevoProceso->pid = pid;
 		nuevoProceso->nroMarco = -1;
 		nuevoProceso->bitPresencia = 0;
+		nuevoProceso->bitUso = 0;
 		nuevoProceso->bitModificado = 0;
 		nuevoProceso->tiempoLRU = 0;
 		nuevoProceso->tiempoFIFO=0;
@@ -395,7 +413,6 @@ int finalizarProceso(int pid){
 	if (tlbHabilitada())
 		dictionary_iterator(tablaDePaginas,(void*)eliminarProcesoEnTLB);
 	dictionary_remove_and_destroy(tablaDeProcesos,string_itoa(pid),(void*)tablaDePaginasDestroy);
-	//TODO eliminar de TLB
 	return 1;//o -1 en error
 }
 
@@ -406,12 +423,18 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	if (paginaALeer->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
 					paginaALeer->nroMarco = asignarNuevoMarco();
+					if(algoritmoDeReemplazo==CLOCKMEJORADO)
+						list_add(punteroClockMejorado,paginaALeer);
+					log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 		}else{
 			//reemplaza un marco
+			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 			int paginaAReemplazar= paginaAReemplazarPorAlgoritmo(tablaDePaginas);
+			log_info(archivoLogPrueba,"pagina a reemplazar: %i",paginaAReemplazar);
 			pagina_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
 			paginaALeer->nroMarco=victima->nroMarco;
 			victima->bitPresencia=0;
+			victima->bitUso=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
 			if(tlbHabilitada()){
@@ -428,6 +451,8 @@ int leerMemoria(int pid, int pagina, void*contenido){
 			success = leerDeSwap(pid,pagina,contenido);
 			log_info(archivoLog,"Contenido de swap es: %s",contenido);
 			memcpy(memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,contenido,tamanioMarco);
+			if(algoritmoDeReemplazo==CLOCKMEJORADO)
+				list_add(punteroClockMejorado,paginaALeer);
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}else
@@ -435,6 +460,7 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	//paginaALeer->bitModificado=0;
 	paginaALeer->bitPresencia=1;
 	paginaALeer->tiempoLRU=1;
+	paginaALeer->bitUso=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),paginaALeer);
@@ -456,13 +482,19 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			log_info(archivoLog,"Antes de asignar un marco nuevo\n");
 			paginaAEscribir->nroMarco = asignarNuevoMarco();
 			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",paginaAEscribir->nroMarco);
+			if(algoritmoDeReemplazo==CLOCKMEJORADO)
+				list_add(punteroClockMejorado,paginaAEscribir);
+			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 		}else{//reemplaza un marco
+			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 			log_info(archivoLog,"Empieza el algoritmo de reemplazo\n");
 			int paginaAReemplazar = paginaAReemplazarPorAlgoritmo(tablaDePaginas);
+			log_info(archivoLogPrueba,"pagina a reemplazar: %i",paginaAReemplazar);
 			log_info(archivoLog,"Encontrada victima para reemplazo, pagina: %i",paginaAReemplazar);
 			pagina_t *victima = dictionary_remove(tablaDePaginas,string_itoa(paginaAReemplazar));
 			paginaAEscribir->nroMarco=victima->nroMarco;
 			victima->bitPresencia=0;
+			victima->bitUso=0;
 			victima->tiempoLRU=0;
 			victima->tiempoFIFO=0;
 			if (tlbHabilitada()){
@@ -477,6 +509,8 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 				victima->bitModificado=0;
 				free(aux);
 			}
+			if(algoritmoDeReemplazo==CLOCKMEJORADO)
+				list_add(punteroClockMejorado,paginaAEscribir);
 			dictionary_put(tablaDePaginas,string_itoa(paginaAReemplazar),victima);
 		}
 	}
@@ -488,6 +522,7 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",memoriaPrincipal,strlen(memoriaPrincipal));
 	paginaAEscribir->bitModificado=1;
 	paginaAEscribir->bitPresencia=1;
+	paginaAEscribir->bitUso=1;
 	paginaAEscribir->tiempoLRU=0;
 	//paginaAEscribir->tiempoFIFO=1;
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
@@ -606,6 +641,9 @@ int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
 	int i=0;
 	int paginaAReemplazar=-1;
 	int tiempoMaximo=-1;
+	int pos=-1;
+	pagina_t *a = list_get(punteroClockMejorado,0);
+	log_info(archivoLogPrueba,"El puntero apunta a la pagina: %i con U: %i y M: %i",a->nroPagina,a->bitUso,a->bitModificado);
 	switch(algoritmoDeReemplazo){
 	case FIFO:
 		while(i<dictionary_size(tablaDePaginas)){
@@ -619,8 +657,39 @@ int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
 		}
 		break;
 	case LRU:
+		while(i<dictionary_size(tablaDePaginas)){
+			pagina_t* aux= dictionary_get(tablaDePaginas,string_itoa(i));
+			if(aux->bitPresencia==1)
+				if(aux->tiempoLRU>tiempoMaximo){
+					tiempoMaximo=aux->tiempoLRU;
+					paginaAReemplazar=i;
+				}
+			i++;
+		}
 		break;
 	case CLOCKMEJORADO:
+		while (paginaAReemplazar==-1){
+			i=0;
+			while(i<list_size(punteroClockMejorado)&&paginaAReemplazar==-1){
+				pagina_t* aux = list_remove(punteroClockMejorado,0);
+				if (aux->bitModificado==0&&aux->bitUso==0){
+					paginaAReemplazar=aux->nroPagina;
+				}else
+					list_add(punteroClockMejorado,aux);
+				i++;
+			}
+			i=0;
+			while(i<list_size(punteroClockMejorado)&&paginaAReemplazar==-1){
+				pagina_t* aux = list_remove(punteroClockMejorado,0);
+				if (aux->bitModificado==1&&aux->bitUso==0){
+					paginaAReemplazar=aux->nroPagina;
+				}else{
+					aux->bitUso=0;
+					list_add(punteroClockMejorado,aux);
+				}
+				i++;
+			}
+		}
 		break;
 	}
 	return paginaAReemplazar;
@@ -647,6 +716,7 @@ int buscarEnTLBYEscribir(int pid,int pagina,char* contenido){
 			t_dictionary* tablaAux = dictionary_get(tablaDeProcesos,string_itoa(pid));
 			pagina_t *paginaAux = dictionary_get(tablaAux,string_itoa(pagina));
 			paginaAux->bitModificado=1;
+			paginaAux->bitUso=1;//TODO preguntar si se actualizan los algoritmos de reemplazo
 			free(paginaAEscribir);
 		}
 		i++;
@@ -663,6 +733,9 @@ int buscarEnTLBYLeer(int pid,int pagina,char* contenido){
 			tlbHit =1;
 			log_info(archivoLog,"TLB hit para lectura de pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 			memcpy(contenido,memoriaPrincipal+marcoTLB*tamanioMarco,tamanioMarco);
+			t_dictionary* tablaAux = dictionary_get(tablaDeProcesos,string_itoa(pid));
+			pagina_t *paginaAux = dictionary_get(tablaAux,string_itoa(pagina));
+			paginaAux->bitUso=1;
 		}
 		i++;
 	}
@@ -690,7 +763,7 @@ int eliminarEntradaEnTLB(int pid, int pagina){
 
 void eliminarProcesoEnTLB(char* key, pagina_t* value) {
    if(value->bitPresencia==1)
-	 eliminarEntradaEnTLB(value->processID,strtol(key,NULL,10));
+	 eliminarEntradaEnTLB(value->pid,strtol(key,NULL,10));
 }
 
 void agregarEntradaEnTLB(int pid, int pagina, int marco){
@@ -702,9 +775,9 @@ void agregarEntradaEnTLB(int pid, int pagina, int marco){
 	if(list_size(tlb)==entradasTLB){
 		entradaTLB_t *aux = list_remove(tlb,0);
 		log_info(archivoLog,"Reemplazo una entrada en la TLB");
-		log_info(archivoLog,"Elimino la entrada pid: %i, pagina: %i, marco: %i",aux->pid,aux->pagina,aux->marco);
+		log_info(archivoLog,"Elimino la entrada pid: %i, página: %i, marco: %i",aux->pid,aux->pagina,aux->marco);
 		free(aux);
 	}
-	log_info(archivoLog,"Agrego una nueva entrada en la TLB pid: %i, marco: %i, marco: %i",nuevaEntrada->pid, nuevaEntrada->pagina, nuevaEntrada->marco);
+	log_info(archivoLog,"Agrego una nueva entrada en la TLB pid: %i, página: %i, marco: %i",nuevaEntrada->pid, nuevaEntrada->pagina, nuevaEntrada->marco);
 	list_add(tlb,nuevaEntrada);
 }
