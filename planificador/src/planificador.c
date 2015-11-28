@@ -424,6 +424,11 @@ void logueoEstados(t_queue* cola){
 				break;
 			}
 
+			default:{
+				log_debug(archivoLogDebug, "El proceso ya finalizó. \n");
+				break;
+			}
+
 
 		}
 	}
@@ -646,8 +651,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		}
 		case ENTRADASALIDA:{
 
-			log_info(archivoLog, "Entré al case PROCESOBLOQUEADO");
-			log_debug(archivoLogDebug, "Entré al case PROCESOBLOQUEADO");
+			log_debug(archivoLogDebug, "Entré al case ENTRADASALIDA");
 
 			int programCounter;
 			recibirYDeserializarInt(&programCounter, cpu->cliente);
@@ -665,11 +669,13 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			pcb->estadoProceso = BLOCKED;
 			pcb->programCounter = programCounter;
 
+			log_info(archivoLogObligatorio, "Comienza la entrada-salida del proceso %i: %s", pcb->processID, pcb->path);
+
 			pthread_mutex_lock(&mutexQueueBlocked);
 			finalizarRafaga(pcb, &tiempoBloqueado);
 			pthread_mutex_unlock(&mutexQueueBlocked);
 
-			log_info(archivoLog, "Se bloquea el proceso %i.\n", pcb->processID);
+			log_info(archivoLogDebug, "Se bloquea el proceso %i.\n", pcb->processID);
 
 			break;
 		}
