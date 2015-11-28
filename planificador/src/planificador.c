@@ -67,6 +67,8 @@ pthread_mutex_t mutexQueueCPU;
 pthread_mutex_t mutexQueueCPULibre;
 pthread_mutex_t mutexQueueBlocked;
 pthread_mutex_t mutexCliente;
+pthread_mutex_t mutexPlanificador;
+pthread_mutex_t mutexEntradaSalida;
 
 int pIDContador = 1;
 
@@ -151,6 +153,8 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexQueueCPULibre, NULL);
 	pthread_mutex_init(&mutexQueueBlocked, NULL);
 	pthread_mutex_init(&mutexCliente, NULL);
+	pthread_mutex_init(&mutexPlanificador, NULL);
+	pthread_mutex_init(&mutexEntradaSalida, NULL);
 
 	esperarConexiones();
 
@@ -158,11 +162,13 @@ int main(int argc, char** argv) {
 	pthread_t hiloConsola;
 	pthread_create(&hiloConsola, NULL, (void *) manejoDeConsola, NULL);
 
+	pthread_mutex_lock(&mutexEntradaSalida);
 	pthread_t hiloEntradaSalida;
 	pthread_create(&hiloEntradaSalida, NULL, (void *) entradaSalida, NULL);
 
 	log_info(archivoLogObligatorio,"Comienza la ejecucion del algoritmo %s" , algoritmo);
 
+	pthread_mutex_lock(&mutexPlanificador);
 	//Comienza el thread del planificador
 	pthread_t hiloPlanificador;
 	pthread_create(&hiloPlanificador, NULL, (void *) planificador, NULL);
@@ -275,6 +281,8 @@ void correrProceso(char* path) {
 	pthread_mutex_lock(&mutexQueueReady);
 	queue_push(queueReady, pcb);
 	pthread_mutex_unlock(&mutexQueueReady);
+
+	pthread_mutex_unlock(&mutexPlanificador);
 
 	log_debug(archivoLogDebug, "Se genero el PCB del proceso %i.", pcb->processID);
 }
@@ -390,7 +398,7 @@ void estadoProcesos(){
 
 void logueoEstados(t_queue* cola){
 
-	pcb_t* pcb = malloc(sizeof(pcb_t));
+	pcb_t* pcb;
 	t_queue* queueAux;
 	queueAux = queue_create();
 
@@ -424,7 +432,6 @@ void logueoEstados(t_queue* cola){
 		pcb = queue_pop(queueAux);
 		queue_push(cola, pcb);
 	}
-	free(pcb);
 	queue_destroy(queueAux);
 }
 
@@ -465,7 +472,7 @@ void planificador() {
 	pcb_t* pcb = malloc(sizeof(pcb_t));
 
 	while(1){
-
+		pthread_mutex_lock(&mutexPlanificador);
 		if (! (queue_is_empty(queueCPULibre) || queue_is_empty(queueReady))){
 
 			pthread_mutex_lock(&mutexQueueReady);
@@ -500,6 +507,11 @@ void planificador() {
 			//Comienza un thread para mantener el proceso corriendo y seguirlo
 			pthread_t threadProceso;
 			pthread_create(&threadProceso, NULL, (void *) procesoCorriendo, proceso);
+
+			pthread_mutex_unlock(&mutexPlanificador);
+		} else {
+			pthread_mutex_unlock(&mutexPlanificador);
+			pthread_mutex_lock(&mutexPlanificador);
 		}
 	}
 	free(pcb);
@@ -524,6 +536,8 @@ void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked){
 				proceso->tiempoDormido = *tiempoBlocked;
 				proceso->pcb = pcb;
 				queue_push(queueBlocked, proceso);
+
+				pthread_mutex_unlock(&mutexEntradaSalida);
 				break;
 			}else{
 				log_debug(archivoLogDebug, "El proceso %i va a la cola Ready.", pcb->processID);
@@ -560,7 +574,9 @@ void entradaSalida(){
 
 	while(1){
 
+		pthread_mutex_lock(&mutexEntradaSalida);
 		if(!queue_is_empty(queueBlocked)){
+
 			pthread_mutex_lock(&mutexQueueReady);
 			proceso = queue_pop(queueBlocked);
 			pthread_mutex_unlock(&mutexQueueReady);
@@ -571,6 +587,11 @@ void entradaSalida(){
 			pthread_mutex_lock(&mutexQueueReady);
 			queue_push(queueReady, proceso->pcb);
 			pthread_mutex_unlock(&mutexQueueReady);
+			pthread_mutex_unlock(&mutexPlanificador);
+			pthread_mutex_unlock(&mutexEntradaSalida);
+		} else{
+			pthread_mutex_unlock(&mutexEntradaSalida);
+			pthread_mutex_lock(&mutexEntradaSalida);
 		}
 	}
 
@@ -697,6 +718,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	pthread_mutex_unlock(&mutexQueueCPULibre);
 
 	queue_destroy(queueAux);
+	pthread_mutex_unlock(&mutexPlanificador);
 }
 
 void esperarConexiones(){
