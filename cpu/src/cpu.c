@@ -55,6 +55,7 @@ int programCounter;
 int threadCounter;
 int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
+pthread_mutex_t mutexMetricas;
 
 int configurarSocketCliente(char* ip, int puerto, int*);
 void configurarCPU(char* config);
@@ -63,6 +64,7 @@ void leermProc(int pID, int nroPagina);
 void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
+void comandoCPU(int instruccionesEjecutadas);
 
 //void timer_handler(int signum);
 
@@ -240,6 +242,8 @@ void ejecutarmProc() {
 	int valor;
 	int socketPlaniHilo;
 	int tamanioComando = tamanioMarco+15;
+	int instruccionesEjecutadas;
+	pthread_t hiloMetricas;
 
 	char comandoLeido[tamanioComando]; //TODO CAMBIAR EL 30
 
@@ -249,6 +253,10 @@ void ejecutarmProc() {
 		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlaniHilo);
 	else
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
+
+	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, &instruccionesEjecutadas);
+	//TODO setear instruccionesEjecutadas cada 60 segundos
+
 
 	while(1){
 
@@ -281,7 +289,7 @@ void ejecutarmProc() {
 			fgets(comandoLeido, tamanioComando, mCod); //TODO cambiar el 30
 			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
-			char** leidoSplit = string_split(comandoLeido, " ");
+			char** leidoSplit = string_n_split(comandoLeido, 3, " ");
 			instruccion = leidoSplit[0];
 
 			if (strcmp(instruccion,"finalizar;")) {     //se fija si la instruccion es finalizar, si lo es no asigna leidoSplit[1] en valor
@@ -407,6 +415,8 @@ void ejecutarmProc() {
 				operacion = FINALIZARPROCESO;
 			}
 
+			instruccionesEjecutadas++;
+
 			sleep(retardo);
 
 			if (quantum != -1) {
@@ -463,6 +473,41 @@ void ejecutarmProc() {
 
 	}   //fin while(1)
 }       //fin ejecutarmProc
+
+
+void comandoCPU(int instruccionesEjecutadas){
+	int socketMetricas;
+	int comando;
+	int porcentaje;
+	pthread_mutex_init(&mutexMetricas, NULL);
+
+	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketMetricas))
+		log_info(archivoLog, "Conectado al Planificador %i.\n", socketMetricas);
+	else
+		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
+
+    while(1){
+
+    	recibirYDeserializarInt(&comando, socketMetricas);
+
+	switch(comando){
+	case PEDIDOMETRICA:{
+		pthread_mutex_lock(&mutexMetricas);
+		porcentaje= (instruccionesEjecutadas*100)/(60/retardo);
+		pthread_mutex_unlock(&mutexMetricas);
+
+		int tamanioPorcentaje=sizeof(int);
+		char* paquetePorcentaje=malloc(tamanioPorcentaje);
+		serializarInt(paquetePorcentaje, porcentaje);
+		send(socketPlanificador, paquetePorcentaje, tamanioPorcentaje, 0);
+        free(paquetePorcentaje);
+	}
+	}
+
+    }
+
+}
+
 
 /*void timer_handler (int signum)
 {
