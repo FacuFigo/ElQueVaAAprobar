@@ -139,6 +139,11 @@ int main(int argc, char** argv) {
 	clienteCPU = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLog, "Se conecta el proceso CPU %d\n", clienteCPU);
 
+	char* paquete = malloc(sizeof(int));
+	serializarInt(paquete, tamanioMarco);
+	send(clienteCPU, paquete, sizeof(int), 0);
+	free(paquete);
+
 	//admDeMemoria();
 	pthread_t hiloMemoria;
 	pthread_create(&hiloMemoria, NULL, (void *)admDeMemoria, NULL);
@@ -300,6 +305,7 @@ void admDeMemoria(){
 					tamanioPaquete = sizeof(int);
 					paquete = malloc(sizeof(int));
 					serializarInt(paquete,verificador);
+					free(contenido);
 				}
 				//Le contesto a CPU
 				send(clienteCPU,paquete,tamanioPaquete,0);
@@ -335,6 +341,7 @@ void admDeMemoria(){
 					tamanioPaquete = sizeof(int);
 					paquete = malloc(sizeof(int));
 					serializarInt(paquete,verificador);
+					free(contenido);
 				}
 				//Le contesto a CPU
 				send(clienteCPU,paquete,tamanioPaquete,0);
@@ -418,11 +425,15 @@ int finalizarProceso(int pid){
 
 int leerMemoria(int pid, int pagina, void*contenido){
 	int success;
-	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
+	t_dictionary *tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	pagina_t *paginaALeer = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	if (paginaALeer->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
 					paginaALeer->nroMarco = asignarNuevoMarco();
+					if (paginaALeer->nroMarco==-1){
+						log_info(archivoLog,"Error al asignar un nuevo marco, el proceso se finalizará incorrectamente.");
+						return -1;
+					}
 					if(algoritmoDeReemplazo==CLOCKMEJORADO)
 						list_add(punteroClockMejorado,paginaALeer);
 					log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
@@ -464,7 +475,7 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),paginaALeer);
-	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
+	//dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
 	if(tlbHabilitada())
 		agregarEntradaEnTLB(pid, pagina, paginaALeer->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
 	return success;
@@ -474,13 +485,17 @@ int leerMemoria(int pid, int pagina, void*contenido){
 int escribirMemoria(int pid, int pagina, void* contenido){
 	int success=1;
 	void *marcoAEscribir = calloc(1,tamanioMarco);
-	t_dictionary *tablaDePaginas = dictionary_remove(tablaDeProcesos,string_itoa(pid));
+	t_dictionary *tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	pagina_t *paginaAEscribir = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",paginaAEscribir->nroMarco);
 	if (paginaAEscribir->bitPresencia==0){//fallo de pagina
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
 			log_info(archivoLog,"Antes de asignar un marco nuevo\n");
 			paginaAEscribir->nroMarco = asignarNuevoMarco();
+			if (paginaAEscribir->nroMarco==-1){
+				log_info(archivoLog,"Error al asignar un nuevo marco, el proceso se finalizará incorrectamente.");
+				return -1;
+			}
 			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",paginaAEscribir->nroMarco);
 			if(algoritmoDeReemplazo==CLOCKMEJORADO)
 				list_add(punteroClockMejorado,paginaAEscribir);
@@ -528,7 +543,7 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoLRU);
 	dictionary_iterator(tablaDePaginas,(void*)actualizarTiempoFIFO);
 	//dictionary_put(tablaDePaginas,string_itoa(pagina),process); ahora es innecesario
-	dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
+	//dictionary_put(tablaDeProcesos,string_itoa(pid),tablaDePaginas);
 	if(tlbHabilitada())
 		agregarEntradaEnTLB(pid, pagina, paginaAEscribir->nroMarco);//TODO posiblemente aca haya un TLB hit que contar
 	free(marcoAEscribir);
