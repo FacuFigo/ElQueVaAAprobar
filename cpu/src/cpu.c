@@ -28,6 +28,8 @@
 #include <commons/string.h>
 #include <commons/collections/list.h>
 #include <sockets.h>
+#include <signal.h>
+#include <sys/time.h>
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -52,6 +54,7 @@ int socketMemoria;
 int programCounter;
 int threadCounter;
 int quantum;          //si es -1, toy en fifo
+int tamanioMarco;
 
 int configurarSocketCliente(char* ip, int puerto, int*);
 void configurarCPU(char* config);
@@ -60,6 +63,8 @@ void leermProc(int pID, int nroPagina);
 void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
+
+//void timer_handler(int signum);
 
 int main(int argc, char** argv) {
 
@@ -85,12 +90,41 @@ int main(int argc, char** argv) {
 	else
 		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
+/*	//ARRANCO PRUEBA DE TEPORIZADOR
+
+	struct sigaction sa;
+	struct itimerval timer;
+
+	  Install timer_handler as the signal handler for SIGVTALRM.
+	memset (&sa, 0, sizeof (sa));
+	sa.sa_handler = &timer_handler;
+	sigaction (SIGVTALRM, &sa, NULL);
+
+	  Configure the timer to expire after 250 msec...
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_sec = 10;
+	  ... and every 250 msec after that.
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_sec = 10;
+	  Start a virtual timer. It counts down whenever this process is
+	   executing.
+	setitimer (ITIMER_VIRTUAL, &timer, NULL);
+
+	  Do busy work.
+	while (1);
+
+	//FIN PRUEBA TEMPORIZADOR */
+
 	recibirYDeserializarInt(&quantum, socketPlanificador);
 	log_info(archivoLog, "Recibi quantum %d", quantum);
 
 	char* paquetecpu=malloc(sizeof(int));
 	serializarInt(paquetecpu, cantidadHilos);
 	send(socketPlanificador, paquetecpu, sizeof(int), 0);
+
+	recibirYDeserializarInt(&tamanioMarco, socketMemoria);
+	log_info(archivoLog, "Recibi tamanio pagina %i", tamanioMarco);
+	//TODO RECIBIR Y DESERIALIZAR INT DE MEMORIA (TAMAÑO PAGINA ) Y CAMBIAR EL 30
 
 	pthread_t hilos;
 
@@ -192,8 +226,6 @@ void ejecutarmProc() {
 
 	FILE* mCod;
 
-	char comandoLeido[30]; //TODO CAMBIAR EL 30
-
 	char* path;
 	char* instruccion;
 	char* paqueteRafaga;
@@ -207,6 +239,9 @@ void ejecutarmProc() {
 	int quantumRafaga;
 	int valor;
 	int socketPlaniHilo;
+	int tamanioComando = tamanioMarco+15;
+
+	char comandoLeido[tamanioComando]; //TODO CAMBIAR EL 30
 
 	quantumRafaga = quantum;
 
@@ -238,12 +273,12 @@ void ejecutarmProc() {
 
 		int i;
 		for(i=0; programCounter>i; i++){
-			fgets(comandoLeido, 30, mCod);  //este primer fgets sirve para pararte en el programCounter cuando vuelve de quantum o e/s
+			fgets(comandoLeido, tamanioComando, mCod);  //este primer fgets sirve para pararte en el programCounter cuando vuelve de quantum o e/s
 		}
 
 		do {
 
-			fgets(comandoLeido, 30, mCod); //TODO cambiar el 30
+			fgets(comandoLeido, tamanioComando, mCod); //TODO cambiar el 30
 			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
 			char** leidoSplit = string_split(comandoLeido, " ");
@@ -302,6 +337,7 @@ void ejecutarmProc() {
 				} else {
 
 					log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
+					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA Y QUE NO VUELVA A MANDAR ESTE PROGRAMCOUNTER.
 
 				}
 			}
@@ -309,7 +345,7 @@ void ejecutarmProc() {
 			if (string_equals_ignore_case(instruccion, "escribir")) {
 
 				int nroPagina=valor;
-				char* texto=malloc(30);
+				char* texto=malloc(tamanioMarco);
 				char* textoCorregido = string_substring(leidoSplit[2],1,strlen(leidoSplit[2])-4);//Esto corrige el texto
 
 				escribirmProc(pID, nroPagina, textoCorregido);
@@ -329,6 +365,7 @@ void ejecutarmProc() {
 			    } else {
 
 					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
+					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA.
 
 				}
 			}
@@ -427,5 +464,9 @@ void ejecutarmProc() {
 	}   //fin while(1)
 }       //fin ejecutarmProc
 
-
+/*void timer_handler (int signum)
+{
+ static int count = 0;
+ printf ("HOLA, SOY EL TEMPORIZADOR.\n", ++count);
+} */
 
