@@ -66,8 +66,7 @@ void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
 void comandoCPU(int instruccionesEjecutadas);
-
-//void timer_handler(int signum);
+void timer_handler(int signum, int* instruccionesEjecutadas);
 
 int main(int argc, char** argv) {
 
@@ -93,30 +92,6 @@ int main(int argc, char** argv) {
 	else
 		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
-/*	//ARRANCO PRUEBA DE TEPORIZADOR
-
-	struct sigaction sa;
-	struct itimerval timer;
-
-	  Install timer_handler as the signal handler for SIGVTALRM.
-	memset (&sa, 0, sizeof (sa));
-	sa.sa_handler = &timer_handler;
-	sigaction (SIGVTALRM, &sa, NULL);
-
-	  Configure the timer to expire after 250 msec...
-	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_sec = 10;
-	  ... and every 250 msec after that.
-	timer.it_interval.tv_sec = 0;
-	timer.it_interval.tv_sec = 10;
-	  Start a virtual timer. It counts down whenever this process is
-	   executing.
-	setitimer (ITIMER_VIRTUAL, &timer, NULL);
-
-	  Do busy work.
-	while (1);
-
-	//FIN PRUEBA TEMPORIZADOR */
 
 	recibirYDeserializarInt(&quantum, socketPlanificador);
 	log_info(archivoLog, "Recibi quantum %d", quantum);
@@ -256,6 +231,7 @@ void ejecutarmProc() {
 	else
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
+	pthread_mutex_init(&mutexMetricas, NULL);
 	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, &instruccionesEjecutadas);
 
 	while(continuar){
@@ -427,6 +403,23 @@ void ejecutarmProc() {
 
 			instruccionesEjecutadas++;
 
+			struct sigaction sa;
+			struct itimerval timer;
+
+
+			memset (&sa, 0, sizeof (sa));
+			sa.sa_handler = &timer_handler;
+			sigaction (SIGVTALRM, &sa, NULL);
+
+
+			timer.it_value.tv_sec = 0;
+			timer.it_value.tv_sec = 60;
+
+			timer.it_interval.tv_sec = 0;
+			timer.it_interval.tv_sec = 60;
+
+			setitimer (ITIMER_VIRTUAL, &timer, NULL);
+
 			sleep(retardo);
 
 			if (quantum != -1) {
@@ -500,7 +493,6 @@ void comandoCPU(int instruccionesEjecutadas){
 	int socketMetricas;
 	int comando;
 	int porcentaje;
-	pthread_mutex_init(&mutexMetricas, NULL);
 
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketMetricas))
 		log_info(archivoLog, "Conectado al Planificador %i.\n", socketMetricas);
@@ -530,9 +522,10 @@ void comandoCPU(int instruccionesEjecutadas){
 }
 
 
-/*void timer_handler (int signum)
+void timer_handler (int signum, int* instruccionesEjecutadas)
 {
- static int count = 0;
- printf ("HOLA, SOY EL TEMPORIZADOR.\n", ++count);
-} */
+	pthread_mutex_lock(&mutexMetricas);
+	*instruccionesEjecutadas=0;
+	pthread_mutex_unlock(&mutexMetricas);
+}
 
