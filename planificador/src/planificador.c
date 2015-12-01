@@ -638,14 +638,12 @@ void entradaSalida(){
 			}
 			while(!queue_is_empty(queueAux)){
 				procesoAux = queue_pop(queueAux);
+				queue_push(queueBlocked, procesoAux);
 			}
 			pthread_mutex_unlock(&mutexQueueBlocked);
-
-			pthread_mutex_lock(&mutexQueueReady);
-			queue_push(queueReady, proceso->pcb);
-			pthread_mutex_unlock(&mutexQueueReady);
 			pthread_mutex_unlock(&mutexPlanificador);
 			pthread_mutex_unlock(&mutexEntradaSalida);
+			queue_destroy(queueAux);
 		} else{
 			pthread_mutex_unlock(&mutexEntradaSalida);
 			pthread_mutex_lock(&mutexEntradaSalida);
