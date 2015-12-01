@@ -39,6 +39,7 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
+	FALLOPROCESO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -243,6 +244,8 @@ void ejecutarmProc() {
 	int socketPlaniHilo;
 	int tamanioComando = tamanioMarco+15;
 	int instruccionesEjecutadas;
+	int continuar = 1;
+
 	pthread_t hiloMetricas;
 
 	char comandoLeido[tamanioComando]; //TODO CAMBIAR EL 30
@@ -258,14 +261,17 @@ void ejecutarmProc() {
 	//TODO setear instruccionesEjecutadas cada 60 segundos
 
 
-	while(1){
+	while(continuar){
 
 		entradaSalida=0;
 
 		char* resultadosTot = string_new();
 		log_info(archivoLog, "Quedo esperando, cpu: %i", process_get_thread_id());
 
-		recibirYDeserializarInt(&operacion, socketPlaniHilo);
+		continuar = recibirYDeserializarInt(&operacion, socketPlaniHilo);
+
+		if (continuar) {
+
 		log_info(archivoLog, "Recibi operacion %i.\n", operacion);
 
 		recibirYDeserializarInt(&pID, socketPlaniHilo);
@@ -320,6 +326,8 @@ void ejecutarmProc() {
 					string_append(&resultadosTot, aux);
 					free(aux);
 
+					operacion = FALLOPROCESO;   //PARA EL CASO EN QUE SE PIDAN MAS PAGINAS QUE LAS DISPONIBLES
+					break;
 				}
 			}
 
@@ -345,7 +353,8 @@ void ejecutarmProc() {
 				} else {
 
 					log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
-					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA Y QUE NO VUELVA A MANDAR ESTE PROGRAMCOUNTER.
+					operacion = FALLOPROCESO;  //CASO EN QUE LEE ALGO QUE NO ESTA ?
+					break;
 
 				}
 			}
@@ -373,7 +382,9 @@ void ejecutarmProc() {
 			    } else {
 
 					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
-					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA.
+
+					operacion = FALLOPROCESO;  //EN CASO DE QUE QUIERA ESCRIBIR ALGO QUE NO SE PUEDE
+					break;
 
 				}
 			}
@@ -412,7 +423,7 @@ void ejecutarmProc() {
 
 				}
 
-				operacion = FINALIZARPROCESO;
+				operacion = FINALIZARPROCESO;  //Podria meter un break aca en vez del if en quantum ?
 			}
 
 			instruccionesEjecutadas++;
@@ -465,13 +476,24 @@ void ejecutarmProc() {
 			break;
 			}
 
+			case FALLOPROCESO: {
+
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
+
+			break;
+			}
+
 		}
 
 		send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
 
-	}   //fin while(1)
+		}
+	} 	//fin while(continuar)
+	log_info(archivoLog, "Mi intempestiva muerte llego intempestivamente!!!");
 }       //fin ejecutarmProc
 
 
