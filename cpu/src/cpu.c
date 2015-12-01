@@ -127,7 +127,6 @@ int main(int argc, char** argv) {
 
 	recibirYDeserializarInt(&tamanioMarco, socketMemoria);
 	log_info(archivoLog, "Recibi tamanio pagina %i", tamanioMarco);
-	//TODO RECIBIR Y DESERIALIZAR INT DE MEMORIA (TAMAÑO PAGINA ) Y CAMBIAR EL 30
 
 	pthread_t hilos;
 
@@ -248,7 +247,7 @@ void ejecutarmProc() {
 
 	pthread_t hiloMetricas;
 
-	char comandoLeido[tamanioComando]; //TODO CAMBIAR EL 30
+	char comandoLeido[tamanioComando];
 
 	quantumRafaga = quantum;
 
@@ -258,8 +257,6 @@ void ejecutarmProc() {
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
 	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, &instruccionesEjecutadas);
-	//TODO setear instruccionesEjecutadas cada 60 segundos
-
 
 	while(continuar){
 
@@ -292,7 +289,7 @@ void ejecutarmProc() {
 
 		do {
 
-			fgets(comandoLeido, tamanioComando, mCod); //TODO cambiar el 30
+			fgets(comandoLeido, tamanioComando, mCod);
 			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
 			char** leidoSplit = string_n_split(comandoLeido, 3, " ");
@@ -353,6 +350,8 @@ void ejecutarmProc() {
 				} else {
 
 					log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
+					char* aux = string_from_format("mProc %d: fallo lectura de pagina %d.\n", pID, nroPagina);
+					string_append(&resultadosTot, aux);
 					operacion = FALLOPROCESO;  //CASO EN QUE LEE ALGO QUE NO ESTA ?
 					break;
 
