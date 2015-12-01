@@ -128,6 +128,7 @@ void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked);
 void entradaSalida();
 void procesoCorriendo(procesoCorriendo_t* proceso);
 void logueoEstados(t_queue* cola);
+void logueoEstadosBlock(t_queue* cola);
 
 int main(int argc, char** argv) {
 
@@ -389,7 +390,7 @@ void estadoProcesos(){
 	}
 	if(!queue_is_empty(queueBlocked)){
 		pthread_mutex_lock(&mutexQueueBlocked);
-		logueoEstados(queueBlocked);
+		logueoEstadosBlock(queueBlocked);
 		pthread_mutex_unlock(&mutexQueueBlocked);
 	}
 	if(!queue_is_empty(queueRunning)){
@@ -421,15 +422,7 @@ void logueoEstados(t_queue* cola){
 				queue_push(queueAux, pcb);
 				break;
 			}
-
-			case BLOCKED:{
-				log_debug(archivoLogDebug, "mProc %i: %s -> Bloqueado", pcb->processID, pcb->path);
-				queue_push(queueAux, pcb);
-				break;
-			}
-
 			default:{
-				log_debug(archivoLogDebug, "El proceso ya finalizó. \n");
 				break;
 			}
 
@@ -440,6 +433,34 @@ void logueoEstados(t_queue* cola){
 	while(!queue_is_empty(queueAux)){
 		pcb = queue_pop(queueAux);
 		queue_push(cola, pcb);
+	}
+	queue_destroy(queueAux);
+}
+
+void logueoEstadosBlock(t_queue* cola){
+	procesoBlocked_t* proceso;
+	t_queue* queueAux;
+	queueAux = queue_create();
+
+	while(!queue_is_empty(cola)){
+			proceso = queue_pop(cola);
+
+			switch (proceso->pcb->estadoProceso){
+
+				case BLOCKED:{
+					log_debug(archivoLogDebug, "mProc %i: %s -> Bloqueado", proceso->pcb->processID, proceso->pcb->path);
+					queue_push(queueAux, proceso);
+					break;
+				}
+				default:{
+					break;
+				}
+			}
+	}
+
+	while(!queue_is_empty(queueAux)){
+		proceso = queue_pop(queueAux);
+		queue_push(cola, proceso);
 	}
 	queue_destroy(queueAux);
 }
