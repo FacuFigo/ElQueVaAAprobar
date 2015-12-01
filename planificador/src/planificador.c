@@ -43,6 +43,7 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
+	FALLOPROCESO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 t_log* archivoLog;
@@ -131,6 +132,7 @@ void logueoEstados(t_queue* cola);
 int main(int argc, char** argv) {
 
 	system("rm log_Debug");
+	system("rm log_Planificador_Obligatorio");
 
 	//Creo el archivo de logs
 	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
@@ -263,9 +265,11 @@ void manejoDeConsola() {
 		if (string_starts_with(comando.comando, "ps"))
 				estadoProcesos();
 
-		if(string_starts_with(comando.comando, "cpu"))
+		if(string_starts_with(comando.comando, "cpu")){
+			log_debug(archivoLogDebug, "entra a comando cpu");
 				comandoCPU();
-		
+				log_debug(archivoLogDebug, "sali de comando cpu");
+		}
 		free(comando.comando);
 		free(comando.parametro);
 	}
@@ -448,10 +452,12 @@ void comandoCPU(){
 	queueAux = queue_create();
 	serializarInt(paquete, PEDIDOMETRICA);
 
+	log_debug(archivoLogDebug, "entre a la funcion");
 	pthread_mutex_lock(&mutexQueueCPU);
 	while(!queue_is_empty(queueCPU)){
 		cpu = queue_pop(queueCPU);
 		send(cpu->cliente, paquete, tamanioPaquete, 0);
+		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpu->cliente);
 		queue_push(queueAux, cpu);
 	}
 
@@ -467,6 +473,8 @@ void comandoCPU(){
 
 	int paqueteMetrica;
 	recibirYDeserializarInt(&paqueteMetrica, cpu->cliente);
+	log_debug(archivoLogDebug, "CPU %i: %i%", cpu->cliente, paqueteMetrica);
+
 
 }
 
@@ -581,13 +589,36 @@ void entradaSalida(){
 
 		pthread_mutex_lock(&mutexEntradaSalida);
 		if(!queue_is_empty(queueBlocked)){
+			int tiempoDormido;
+			pcb_t* pcbAux;
+			t_queue* queueAux = queue_create();
+			procesoBlocked_t* procesoAux;
 
-			pthread_mutex_lock(&mutexQueueReady);
+			pthread_mutex_lock(&mutexQueueBlocked);
 			proceso = queue_pop(queueBlocked);
-			pthread_mutex_unlock(&mutexQueueReady);
+			tiempoDormido = proceso->tiempoDormido;
+			pcbAux = proceso->pcb;
+			queue_push(queueBlocked, proceso);
+			pthread_mutex_unlock(&mutexQueueBlocked);
 
 			log_debug(archivoLogDebug, "Entra al thread bloqueado, proceso: %i tiempo: %i", proceso->pcb->processID, proceso->tiempoDormido);
-			sleep(proceso->tiempoDormido);
+			sleep(tiempoDormido);
+
+			pthread_mutex_lock(&mutexQueueBlocked);
+			while(!queue_is_empty(queueBlocked)){
+				proceso = queue_pop(queueBlocked);
+				if(proceso->pcb->processID == pcbAux->processID){
+					pthread_mutex_lock(&mutexQueueReady);
+					queue_push(queueReady, proceso->pcb);
+					pthread_mutex_unlock(&mutexQueueReady);
+				}else{
+					queue_push(queueAux, proceso);
+				}
+			}
+			while(!queue_is_empty(queueAux)){
+				procesoAux = queue_pop(queueAux);
+			}
+			pthread_mutex_unlock(&mutexQueueBlocked);
 
 			pthread_mutex_lock(&mutexQueueReady);
 			queue_push(queueReady, proceso->pcb);
@@ -697,6 +728,20 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 			free(pcb);
 			break;
+		}
+		case FALLOPROCESO:{
+			log_debug(archivoLogDebug, "entre al case FALLOPROCESO");
+
+			char* resultadoRafaga;
+			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
+
+			int* numeroProceso = malloc(sizeof(int));
+			*numeroProceso = pcb->processID;
+
+			log_debug (archivoLogDebug, "El resultado de la rafaga fue :%s.\n", resultadoRafaga);
+
+			free(pcb);
+						break;
 		}
 	}
 
