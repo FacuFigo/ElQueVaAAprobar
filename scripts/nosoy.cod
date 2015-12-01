@@ -1,0 +1,8 @@
+iniciar 5;
+escribir 0 "NoSoy";
+escribir 1 "NoSoy";
+escribir 2 "NoSoy";
+escribir 3 "NoSoy";
+escribir 4 "NoSoy";
+entrada-salida 60;
+finalizar;

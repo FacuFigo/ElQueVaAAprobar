@@ -1,0 +1,17 @@
+iniciar 5;
+escribir 0 "0";
+escribir 1 "1";
+escribir 2 "2";
+escribir 3 "3";
+escribir 4 "4";
+escribir 0 "00";
+escribir 1 "11";
+escribir 2 "22";
+escribir 0 "000";
+escribir 1 "111";
+escribir 2 "222";
+escribir 0 "0000";
+escribir 1 "1111";
+escribir 2 "2222";
+entrada-salida 60;
+finalizar;

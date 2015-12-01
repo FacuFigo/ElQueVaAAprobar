@@ -1,0 +1,18 @@
+iniciar 1;
+escribir 0 "0";
+leer 0;
+escribir 0 "1";
+leer 0;
+escribir 0 "2";
+leer 0;
+escribir 0 "3";
+leer 0;
+escribir 0 "4";
+leer 0;
+escribir 0 "5";
+leer 0;
+escribir 0 "6";
+leer 0;
+escribir 0 "7";
+leer 0;
+finalizar;

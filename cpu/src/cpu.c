@@ -256,7 +256,42 @@ void ejecutarmProc() {
 		recibirYDeserializarChar(&path, socketPlaniHilo);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
+
 		mCod=fopen(path,"r");
+
+		switch(operacion) {
+
+		case FINALIZARPROCESO: {
+
+			do {
+				fgets(comandoLeido, tamanioComando, mCod);
+				char** leidoSplit = string_n_split(comandoLeido, 3, " ");
+				instruccion = leidoSplit[0];
+			}while(!string_equals_ignore_case(instruccion,"finalizar;"));
+
+			finalizarmProc(pID);
+
+			int verificador;
+			recibirYDeserializarInt(&verificador, socketMemoria);
+
+			if (verificador != -1) {
+
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
+				char* aux = string_from_format("mProc %d finalizado.\n",pID);
+				string_append(&resultadosTot, aux);
+				free(aux);
+
+			} else {
+
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
+
+			}
+
+		break;
+
+		}
+
+		case INICIARPROCESO: {
 
 		int i;
 		for(i=0; programCounter>i; i++){
@@ -434,6 +469,11 @@ void ejecutarmProc() {
 			free(leidoSplit);
 
 		} while(!feof(mCod)&&!entradaSalida);//fin del super while
+
+		break; //rompe el case INICIAPROCESO
+
+		}
+		}
 
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 

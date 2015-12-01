@@ -1,0 +1,17 @@
+iniciar 6;
+escribir 2 "dos";
+leer 2;
+escribir 3 "tres";
+leer 2;
+escribir 1 "uno";
+leer 1;
+escribir 5 "cinco";
+leer 2;
+escribir 4 "cuatro";
+leer 5;
+leer 3;
+escribir 2 "dos";
+leer 5;
+leer 2;
+entrada-salida 20;
+finalizar;
