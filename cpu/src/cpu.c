@@ -69,7 +69,7 @@ void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
 void comandoCPU();
-void timer_handler(int signum, int* instruccionesEjecutadas);
+void timer_handler(int signum, int* instruccionesEjecuciones);
 
 int main(int argc, char** argv) {
 
@@ -82,6 +82,12 @@ int main(int argc, char** argv) {
 	log_info(archivoLog, "cantidad de hilos: %d", cantidadHilos);
 
 	instruccionesEjecutadas = malloc(sizeof(int) * cantidadHilos);
+
+	int f;
+		for(f = 0; f < cantidadHilos; f++){
+			instruccionesEjecutadas[f]=0;
+		}
+
 
 	pthread_mutex_init(&mutex, NULL);
 	//conexion con el planificador
@@ -242,6 +248,8 @@ void ejecutarmProc() {
 
 	pthread_mutex_init(&mutexMetricas, NULL);
 	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, NULL);
+
+
 
 	while(continuar){
 
@@ -447,6 +455,8 @@ void ejecutarmProc() {
 			}
 
 			instruccionesEjecutadas[numeroCPU]++;
+			log_info(archivoLog, " las instrucciones ejecutadas son: %i", instruccionesEjecutadas[numeroCPU]);
+
 
 			struct sigaction sa;
 			struct itimerval timer;
@@ -458,12 +468,14 @@ void ejecutarmProc() {
 
 
 			timer.it_value.tv_sec = 0;
-			timer.it_value.tv_sec = 60;
+			timer.it_value.tv_sec = 30;
 
 			timer.it_interval.tv_sec = 0;
-			timer.it_interval.tv_sec = 60;
+			timer.it_interval.tv_sec = 30;
 
 			setitimer (ITIMER_VIRTUAL, &timer, NULL);
+
+
 
 			sleep(retardo);
 
@@ -562,7 +574,7 @@ void comandoCPU(){
 	switch(comando){
 	case PEDIDOMETRICA:{
 		pthread_mutex_lock(&mutexMetricas);
-		porcentaje= (instruccionesEjecutadas[numeroCPU]*100) / (60/retardo);
+		porcentaje= instruccionesEjecutadas[numeroCPU]*10;
 		log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 		pthread_mutex_unlock(&mutexMetricas);
 
@@ -583,6 +595,8 @@ void comandoCPU(){
 
 void timer_handler (int signum, int* instruccionesEjecutadas)
 {
+
+	log_info(archivoLog, "Entro al timer handler");
 	pthread_mutex_lock(&mutexMetricas);
 	int i;
 	for(i = 0; i < cantidadHilos; i++){
