@@ -39,6 +39,7 @@ typedef enum {
 	ESCRIBIRMEMORIA = 4,
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
+	FALLOPROCESO = 7,
 	PEDIDOMETRICA = 8
 } operacion_t;
 
@@ -55,7 +56,10 @@ int programCounter;
 int threadCounter;
 int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
+int* instruccionesEjecutadas;
+
 pthread_mutex_t mutexMetricas;
+pthread_mutex_t mutex;
 
 int configurarSocketCliente(char* ip, int puerto, int*);
 void configurarCPU(char* config);
@@ -64,9 +68,8 @@ void leermProc(int pID, int nroPagina);
 void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
-void comandoCPU(int instruccionesEjecutadas);
-
-//void timer_handler(int signum);
+void comandoCPU();
+void timer_handler(int signum, int* instruccionesEjecutadas);
 
 int main(int argc, char** argv) {
 
@@ -78,6 +81,9 @@ int main(int argc, char** argv) {
 
 	log_info(archivoLog, "cantidad de hilos: %d", cantidadHilos);
 
+	instruccionesEjecutadas = malloc(sizeof(int) * cantidadHilos);
+
+	pthread_mutex_init(&mutex, NULL);
 	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 			&socketPlanificador))
@@ -92,30 +98,6 @@ int main(int argc, char** argv) {
 	else
 		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
 
-/*	//ARRANCO PRUEBA DE TEPORIZADOR
-
-	struct sigaction sa;
-	struct itimerval timer;
-
-	  Install timer_handler as the signal handler for SIGVTALRM.
-	memset (&sa, 0, sizeof (sa));
-	sa.sa_handler = &timer_handler;
-	sigaction (SIGVTALRM, &sa, NULL);
-
-	  Configure the timer to expire after 250 msec...
-	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_sec = 10;
-	  ... and every 250 msec after that.
-	timer.it_interval.tv_sec = 0;
-	timer.it_interval.tv_sec = 10;
-	  Start a virtual timer. It counts down whenever this process is
-	   executing.
-	setitimer (ITIMER_VIRTUAL, &timer, NULL);
-
-	  Do busy work.
-	while (1);
-
-	//FIN PRUEBA TEMPORIZADOR */
 
 	recibirYDeserializarInt(&quantum, socketPlanificador);
 	log_info(archivoLog, "Recibi quantum %d", quantum);
@@ -126,7 +108,6 @@ int main(int argc, char** argv) {
 
 	recibirYDeserializarInt(&tamanioMarco, socketMemoria);
 	log_info(archivoLog, "Recibi tamanio pagina %i", tamanioMarco);
-	//TODO RECIBIR Y DESERIALIZAR INT DE MEMORIA (TAMAÑO PAGINA ) Y CAMBIAR EL 30
 
 	pthread_t hilos;
 
@@ -242,30 +223,37 @@ void ejecutarmProc() {
 	int valor;
 	int socketPlaniHilo;
 	int tamanioComando = tamanioMarco+15;
-	int instruccionesEjecutadas;
+	int continuar = 1;
+
 	pthread_t hiloMetricas;
 
-	char comandoLeido[tamanioComando]; //TODO CAMBIAR EL 30
+	char comandoLeido[tamanioComando];
 
 	quantumRafaga = quantum;
 
+	pthread_mutex_lock(&mutex);
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketPlaniHilo))
 		log_info(archivoLog, "Conectado al Planificador %i.\n", socketPlaniHilo);
 	else
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
-	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, &instruccionesEjecutadas);
-	//TODO setear instruccionesEjecutadas cada 60 segundos
+	int numeroCPU;
+	recibirYDeserializarInt(&numeroCPU, socketPlaniHilo);
 
+	pthread_mutex_init(&mutexMetricas, NULL);
+	pthread_create(&hiloMetricas, NULL, (void *) comandoCPU, NULL);
 
-	while(1){
+	while(continuar){
 
 		entradaSalida=0;
 
 		char* resultadosTot = string_new();
 		log_info(archivoLog, "Quedo esperando, cpu: %i", process_get_thread_id());
 
-		recibirYDeserializarInt(&operacion, socketPlaniHilo);
+		continuar = recibirYDeserializarInt(&operacion, socketPlaniHilo);
+
+		if (continuar) {
+
 		log_info(archivoLog, "Recibi operacion %i.\n", operacion);
 
 		recibirYDeserializarInt(&pID, socketPlaniHilo);
@@ -277,7 +265,42 @@ void ejecutarmProc() {
 		recibirYDeserializarChar(&path, socketPlaniHilo);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
+
 		mCod=fopen(path,"r");
+
+		switch(operacion) {
+
+		case FINALIZARPROCESO: {
+
+			do {
+				fgets(comandoLeido, tamanioComando, mCod);
+				char** leidoSplit = string_n_split(comandoLeido, 3, " ");
+				instruccion = leidoSplit[0];
+			}while(!string_equals_ignore_case(instruccion,"finalizar;"));
+
+			finalizarmProc(pID);
+
+			int verificador;
+			recibirYDeserializarInt(&verificador, socketMemoria);
+
+			if (verificador != -1) {
+
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d finalizado", pID);
+				char* aux = string_from_format("mProc %d finalizado.\n",pID);
+				string_append(&resultadosTot, aux);
+				free(aux);
+
+			} else {
+
+				log_info(archivoLog,"Instruccion ejecutada:finalizar Proceso:%d - Error al finalizar", pID);
+
+			}
+
+		break;
+
+		}
+
+		case INICIARPROCESO: {
 
 		int i;
 		for(i=0; programCounter>i; i++){
@@ -286,7 +309,7 @@ void ejecutarmProc() {
 
 		do {
 
-			fgets(comandoLeido, tamanioComando, mCod); //TODO cambiar el 30
+			fgets(comandoLeido, tamanioComando, mCod);
 			log_info(archivoLog,"PRIMER comando leido: %s", comandoLeido);
 
 			char** leidoSplit = string_n_split(comandoLeido, 3, " ");
@@ -320,6 +343,8 @@ void ejecutarmProc() {
 					string_append(&resultadosTot, aux);
 					free(aux);
 
+					operacion = FALLOPROCESO;   //PARA EL CASO EN QUE SE PIDAN MAS PAGINAS QUE LAS DISPONIBLES
+					break;
 				}
 			}
 
@@ -345,7 +370,10 @@ void ejecutarmProc() {
 				} else {
 
 					log_info(archivoLog,"Instruccion ejecutada: leer %d  Proceso: %d - Error de lectura",nroPagina, pID);
-					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA Y QUE NO VUELVA A MANDAR ESTE PROGRAMCOUNTER.
+					char* aux = string_from_format("mProc %d: fallo lectura de pagina %d.\n", pID, nroPagina);
+					string_append(&resultadosTot, aux);
+					operacion = FALLOPROCESO;  //CASO EN QUE LEE ALGO QUE NO ESTA ?
+					break;
 
 				}
 			}
@@ -373,7 +401,9 @@ void ejecutarmProc() {
 			    } else {
 
 					log_info(archivoLog, "Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura", nroPagina, texto, pID);
-					//TODO CAMBIO DE OPERACION EN EL QUE INDICO AL PLANI QUE FALLO EL PROCESO y METER UN BREAK X ACA.
+
+					operacion = FALLOPROCESO;  //EN CASO DE QUE QUIERA ESCRIBIR ALGO QUE NO SE PUEDE
+					break;
 
 				}
 			}
@@ -412,10 +442,27 @@ void ejecutarmProc() {
 
 				}
 
-				operacion = FINALIZARPROCESO;
+				operacion = FINALIZARPROCESO;  //Podria meter un break aca en vez del if en quantum ?
 			}
 
-			instruccionesEjecutadas++;
+			instruccionesEjecutadas[numeroCPU]++;
+
+			struct sigaction sa;
+			struct itimerval timer;
+
+
+			memset (&sa, 0, sizeof (sa));
+			sa.sa_handler = &timer_handler;
+			sigaction (SIGVTALRM, &sa, NULL);
+
+
+			timer.it_value.tv_sec = 0;
+			timer.it_value.tv_sec = 60;
+
+			timer.it_interval.tv_sec = 0;
+			timer.it_interval.tv_sec = 60;
+
+			setitimer (ITIMER_VIRTUAL, &timer, NULL);
 
 			sleep(retardo);
 
@@ -431,6 +478,11 @@ void ejecutarmProc() {
 			free(leidoSplit);
 
 		} while(!feof(mCod)&&!entradaSalida);//fin del super while
+
+		break; //rompe el case INICIAPROCESO
+
+		}
+		}
 
 		log_info(archivoLog, "Ejecucion de rafaga concluida. Proceso:%d", pID);
 
@@ -465,41 +517,60 @@ void ejecutarmProc() {
 			break;
 			}
 
+			case FALLOPROCESO: {
+
+			tamanioPaquete = strlen(resultadosTot) + 1 + sizeof(int)*2;
+			paqueteRafaga = malloc(tamanioPaquete);
+			serializarChar(serializarInt(paqueteRafaga, operacion), resultadosTot);
+
+			break;
+			}
+
 		}
 
 		send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 		free(resultadosTot);
 		free(paqueteRafaga);
 
-	}   //fin while(1)
+		}
+	} 	//fin while(continuar)
+	log_info(archivoLog, "Mi intempestiva muerte llego intempestivamente!!!");
 }       //fin ejecutarmProc
 
 
-void comandoCPU(int instruccionesEjecutadas){
+void comandoCPU(){
 	int socketMetricas;
 	int comando;
 	int porcentaje;
-	pthread_mutex_init(&mutexMetricas, NULL);
 
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,	&socketMetricas))
 		log_info(archivoLog, "Conectado al Planificador %i.\n", socketMetricas);
 	else
 		log_error(archivoLog, "Error al conectar con Planificador. %s\n", ipPlanificador);
 
+	int numeroCPU;
+	recibirYDeserializarInt(&numeroCPU, socketMetricas);
+
+	pthread_mutex_unlock(&mutex);
+
     while(1){
 
     	recibirYDeserializarInt(&comando, socketMetricas);
 
+    	log_info(archivoLog, "recibí operación: %i", comando);
 	switch(comando){
 	case PEDIDOMETRICA:{
 		pthread_mutex_lock(&mutexMetricas);
-		porcentaje= (instruccionesEjecutadas*100)/(60/retardo);
+		porcentaje= (instruccionesEjecutadas[numeroCPU]*100) / (60/retardo);
+		log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 		pthread_mutex_unlock(&mutexMetricas);
+
+		log_info(archivoLog, "SALI DEL MUTEX");
 
 		int tamanioPorcentaje=sizeof(int);
 		char* paquetePorcentaje=malloc(tamanioPorcentaje);
 		serializarInt(paquetePorcentaje, porcentaje);
-		send(socketPlanificador, paquetePorcentaje, tamanioPorcentaje, 0);
+		send(socketMetricas, paquetePorcentaje, tamanioPorcentaje, 0);
         free(paquetePorcentaje);
 	}
 	}
@@ -509,9 +580,13 @@ void comandoCPU(int instruccionesEjecutadas){
 }
 
 
-/*void timer_handler (int signum)
+void timer_handler (int signum, int* instruccionesEjecutadas)
 {
- static int count = 0;
- printf ("HOLA, SOY EL TEMPORIZADOR.\n", ++count);
-} */
+	pthread_mutex_lock(&mutexMetricas);
+	int i;
+	for(i = 0; i < cantidadHilos; i++){
+		instruccionesEjecutadas[i]=0;
+	}
+	pthread_mutex_unlock(&mutexMetricas);
+}
 
