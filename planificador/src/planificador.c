@@ -93,6 +93,7 @@ typedef struct {
 typedef struct{
 	int numeroCPU;
 	int cliente;
+	int CPUMetrica;
 } cpu_t;
 
 typedef struct {
@@ -467,7 +468,7 @@ void logueoEstadosBlock(t_queue* cola){
 
 void comandoCPU(){
 	t_queue* queueAux;
-	cpu_t* cpu;
+	cpu_t* cpuMetrica;
 	int tamanioPaquete = sizeof(int);
 	char* paquete = malloc(tamanioPaquete);
 	queueAux = queue_create();
@@ -476,25 +477,26 @@ void comandoCPU(){
 	log_debug(archivoLogDebug, "entre a la funcion");
 	pthread_mutex_lock(&mutexQueueCPU);
 	while(!queue_is_empty(queueCPU)){
-		cpu = queue_pop(queueCPU);
-		send(cpu->cliente, paquete, tamanioPaquete, 0);
-		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpu->cliente);
-		queue_push(queueAux, cpu);
+		//TODO poner un sockt que sE CONECte al hilo dentro del hilo
+		cpuMetrica = queue_pop(queueCPU);
+		send(cpuMetrica->CPUMetrica, paquete, tamanioPaquete, 0);
+		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpuMetrica->CPUMetrica);
+		queue_push(queueAux, cpuMetrica);
 	}
 
 	free(paquete);
 
 	while(!queue_is_empty(queueAux)){
-		cpu = queue_pop(queueAux);
-		queue_push(queueCPU, cpu);
+		cpuMetrica = queue_pop(queueAux);
+		queue_push(queueCPU, cpuMetrica);
 	}
 
 	queue_destroy(queueAux);
 	pthread_mutex_unlock(&mutexQueueCPU);
 
 	int paqueteMetrica;
-	recibirYDeserializarInt(&paqueteMetrica, cpu->cliente);
-	log_debug(archivoLogDebug, "CPU %i: %i%", cpu->cliente, paqueteMetrica);
+	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
+	log_debug(archivoLogDebug, "CPU %i: %i", cpuMetrica->CPUMetrica, paqueteMetrica);
 
 
 }
@@ -799,6 +801,7 @@ void esperarConexiones(){
 
 	//En primera instancia se conecta el proceso CPU y manda la cantidad de CPUs que va a tener corriendo
 	struct sockaddr_storage direccionCliente;
+	struct sockaddr_storage direccionClienteMetrica;
 	unsigned int len = sizeof(direccionCliente);
 	clienteCPUPadre = accept(listeningSocket, (void*) &direccionCliente, &len);
 	log_info(archivoLogObligatorio, "Se conecta el proceso CPU %d\n", clienteCPUPadre);
@@ -822,7 +825,14 @@ void esperarConexiones(){
 
 		struct sockaddr_storage direccionCliente;
 		unsigned int len = sizeof(direccionCliente);
+		unsigned int lenMetrica = sizeof(direccionClienteMetrica);
 		cpu->cliente = accept(listeningSocket, (void*) &direccionCliente, &len);
+		char* paquete = malloc(sizeof(int));
+		serializarInt(paquete, i -1);
+		send(cpu->cliente, paquete, sizeof(int), 0);
+		cpu->CPUMetrica = accept(listeningSocket, (void*) &direccionClienteMetrica, &lenMetrica);
+		send(cpu->CPUMetrica, paquete, sizeof(int), 0);
+		free(paquete);
 		cpu->numeroCPU = i;
 		log_debug(archivoLogDebug, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
 		log_info(archivoLogObligatorio, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
