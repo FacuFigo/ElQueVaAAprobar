@@ -265,8 +265,9 @@ void ejecutarmProc() {
 		recibirYDeserializarChar(&path, socketPlaniHilo);
 		log_info(archivoLog, "Recibi path %s.\n", path);
 
+		char* ruta = string_from_format("/home/utnso/tp-2015-2c-elquevaaaprobar/scripts/%s", path);
 
-		mCod=fopen(path,"r");
+		mCod=fopen(ruta,"r");;
 
 		switch(operacion) {
 
