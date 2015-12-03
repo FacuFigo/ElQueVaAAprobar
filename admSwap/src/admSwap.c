@@ -77,7 +77,6 @@ int clienteMemoria;
 int fragmentacionExt;
 
 t_list* listaGestionEspacios;
-t_list* listaProcesos;
 
 FILE* archivoSwap;
 
@@ -97,6 +96,9 @@ int leerPagina(int pid, int numeroPagina, char* contenidoLeido);
 int escribirPagina(int pid, int paginaAEscribir, char* contenido);
 
 void compactador();
+void leerPaginaCompactador(int pagina, char* contenidoLeido);
+void escribirPaginaCompactador(char* contenidoAMover, int paginaAMover);
+void vaciarPagina(int paginaAVaciar);
 
 int main(int argc, char** argv) {
 
@@ -250,14 +252,35 @@ void admDeEspacios(){
 				if(paginaInicio == -1){
 
 					if(fragmentacionExt >= proceso->cantidadDePaginas){
+						log_debug(logDebug, "Adentro del if");
 						pthread_t compactador;
 						pthread_create(&compactador, NULL, (void *) compactador, NULL);
 
-						pthread_mutex_unlock(&accesoAMemoria);
+						pthread_join(compactador, NULL);
 
-						log_debug(logDebug, "Inicia el hilo compactador.");
+						paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
 
-						//Se envia confirmacion en el thread del compactador
+						//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
+						asignarEspacio(paginaInicio, proceso);
+
+						log_debug(logDebug, "Se le asignaron las paginas al proceso %i.", proceso->processID);
+
+						int* byteInicial = malloc(sizeof(int));
+						*byteInicial = paginaInicio * tamanioPagina;
+
+						int* tamanioProceso = malloc(sizeof(int));
+						*tamanioProceso = proceso->cantidadDePaginas * tamanioPagina;
+
+						log_info(archivoLog, "Se le asigno el espacio al mProc %i, byte inicial: %i, tamaño proceso: %i", proceso->processID, *byteInicial, *tamanioProceso);
+
+						free(byteInicial);
+						free(tamanioProceso);
+
+						serializarInt(paquete, 1);
+						send(clienteMemoria, paquete, tamanioPaquete, 0);
+
+						free(paquete);
+
 					}else{
 
 						//No hay espacio disponible
@@ -270,6 +293,7 @@ void admDeEspacios(){
 						free(paquete);
 					}
 				} else{
+
 					//Se guarda en la lista de gestion de procesos el proceso que acaba de entrar a memoria
 					asignarEspacio(paginaInicio, proceso);
 
@@ -607,43 +631,105 @@ int escribirPagina(int pid, int paginaAEscribir, char* contenido){
 
 void compactador(){
 
-	pthread_mutex_lock(&accesoAMemoria);
+	//Indice de paginas
+	int numeroPagina = 0;
+	//Indice de espacios en blanco
+	int numeroPaginaBlanco = 0;
+	int* paginaBlanco = malloc(sizeof(int));
+
+	t_list* espaciosVacios;
+	pagina_t* pagina = malloc(sizeof(pagina_t));
+	pagina_t* paginaNueva = malloc(sizeof(pagina_t));
+
+	espaciosVacios = list_create();
 
 	log_debug(logDebug,"CO-CO-CO-COMPACTATION!!");
 	log_debug(logDebug, "Tamaño de fragmentacón: %i", fragmentacionExt);
 
-	pagina_t* pagina;
-	int numeroPagina = 0;
-	int comienzoEspacioVacio = 0; //Pagina en la que inicia
-	int tamanioEspacioVacio = 0;  //Tamaño del espacio en paginas
-	int paginaAAsignar = 0; //Pagina a la que se va a asignar el proceso
-
-	//TODO Sacar los espacios vacios
-	//Despues de encontrar el primer espacio vacio, ubicar el siguiente proceso que se encuentra luego de este espacio
-
 	pagina = list_get(listaGestionEspacios, numeroPagina);
-	while(pagina->disponibilidad == 0){
-		pagina = list_get(listaGestionEspacios, numeroPagina);
+
+	while(numeroPagina < cantidadPaginas){
+
+		while(pagina->disponibilidad == 0 && numeroPagina < cantidadPaginas){
+			pagina = list_get(listaGestionEspacios, numeroPagina);
+			numeroPagina++;
+		}
+
+		list_add(espaciosVacios, &pagina->numeroPagina);
+
+		//Leo la proxima pagina
 		numeroPagina++;
-	}
-	//Asigno la pagina inicial
-	comienzoEspacioVacio = pagina->numeroPagina;
-
-	//Leo la proxima pagina
-	numeroPagina++;
-	pagina = list_get(listaGestionEspacios, numeroPagina);
-	//Recorro la lista para saber el tamaño del espacio vacio
-	while(pagina->disponibilidad == 1){
 		pagina = list_get(listaGestionEspacios, numeroPagina);
-		numeroPagina++;
-		tamanioEspacioVacio++;
+
+		//Agrego los espacios vacios a la lista
+		while(pagina->disponibilidad == 1 && numeroPagina < cantidadPaginas){
+			list_add(espaciosVacios, &pagina->numeroPagina);
+			numeroPagina++;
+			pagina = list_get(listaGestionEspacios, numeroPagina);
+		}
+
+		//Lista de espacios creada con solo los numeros de pagina
+		//Se acabo un espacio en blanco
+		//Mientras no encuentre un espacio en blanco, sigue buscando
+		while(pagina->disponibilidad == 0 && numeroPagina < cantidadPaginas){
+			paginaBlanco = list_get(espaciosVacios, numeroPaginaBlanco);
+			char* contenidoAMover = malloc(sizeof(tamanioPagina));
+
+			//Leo la pagina del proceso
+			leerPaginaCompactador(pagina->numeroPagina, contenidoAMover);
+
+			//Escribo la pagina en la nueva posicion
+			escribirPaginaCompactador(contenidoAMover, *paginaBlanco);
+
+			//Vaciar pagina en la que estaba
+			vaciarPagina(pagina->numeroPagina);
+
+			free(contenidoAMover);
+
+			//Muevo la pagina escrita en la lista
+			paginaNueva = list_get(listaGestionEspacios, *paginaBlanco);
+			paginaNueva->disponibilidad = 0;
+			paginaNueva->proceso = pagina->proceso;
+
+			pagina->disponibilidad = 1;
+			pagina->proceso = -1;
+
+			//Al ser ahora un espacio en blanco, se addea a la lista de espacios en blanco
+			list_add(espaciosVacios, &pagina->numeroPagina);
+
+			numeroPagina++;
+			numeroPaginaBlanco++;
+			if (numeroPagina < cantidadPaginas)
+				//Vuelvo a leer para ver si hay más espacios en blanco
+				pagina = list_get(listaGestionEspacios, numeroPagina);
+		}
 	}
 
-	//TODO Recorrer de nuevo la lista hasta que se encuentre otro blanco, pagina que se encuentre, pagina que se mueve al primer lugar blanco que se paso
+	list_destroy(espaciosVacios);
 
-	//TODO Hacer los movimientos dentro del archivo
+}
 
-	//TODO Hacer la asignacion y enviar confirmacion
+void leerPaginaCompactador(int pagina, char* contenidoLeido){
+	int posicion = pagina * tamanioPagina;
 
-	pthread_mutex_unlock(&accesoAMemoria);
+	fseek(archivoSwap, posicion, SEEK_SET);
+	fgets(contenidoLeido, tamanioPagina, archivoSwap);
+
+}
+
+void escribirPaginaCompactador(char* contenidoAEscribir, int paginaAMover){
+	int posicion = paginaAMover * tamanioPagina;
+
+	fseek(archivoSwap, posicion, SEEK_SET);
+	fputs(contenidoAEscribir, archivoSwap);
+
+}
+
+void vaciarPagina(int paginaAVaciar){
+	int posicion = paginaAVaciar * tamanioPagina;
+	char* vacios = string_repeat('\0', tamanioPagina);
+
+	fseek(archivoSwap, posicion, SEEK_SET);
+	fputs(vacios, archivoSwap);
+
 }
