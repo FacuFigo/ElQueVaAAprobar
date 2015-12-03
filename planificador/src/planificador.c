@@ -67,9 +67,9 @@ pthread_mutex_t mutexQueueRunning;
 pthread_mutex_t mutexQueueCPU;
 pthread_mutex_t mutexQueueCPULibre;
 pthread_mutex_t mutexQueueBlocked;
-pthread_mutex_t mutexCliente;
 pthread_mutex_t mutexPlanificador;
 pthread_mutex_t mutexEntradaSalida;
+pthread_mutex_t mutexCola;
 
 int pIDContador = 1;
 int cantidadCPUs;
@@ -89,6 +89,7 @@ typedef struct {
 	estados_t estadoProceso;
 	int programCounter;
 	char* path;
+	int flagFinalizar;
 } pcb_t;
 
 typedef struct{
@@ -157,9 +158,9 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexQueueCPU, NULL);
 	pthread_mutex_init(&mutexQueueCPULibre, NULL);
 	pthread_mutex_init(&mutexQueueBlocked, NULL);
-	pthread_mutex_init(&mutexCliente, NULL);
 	pthread_mutex_init(&mutexPlanificador, NULL);
 	pthread_mutex_init(&mutexEntradaSalida, NULL);
+	pthread_mutex_init(&mutexCola, NULL);
 
 	esperarConexiones();
 
@@ -269,9 +270,7 @@ void manejoDeConsola() {
 				estadoProcesos();
 
 		if(string_starts_with(comando.comando, "cpu")){
-			log_debug(archivoLogDebug, "entra a comando cpu");
 				comandoCPU();
-				log_debug(archivoLogDebug, "sali de comando cpu");
 		}
 		free(comando.comando);
 		free(comando.parametro);
@@ -295,7 +294,7 @@ void correrProceso(char* path) {
 }
 
 void generarPCB(pcb_t* pcb){
-
+	pcb->flagFinalizar = 0;
 	pcb->processID = pIDContador;
 	pcb->programCounter = 0;
 	//El estado se asigna a Ready
@@ -322,29 +321,33 @@ void finalizarProceso(int pid){
 
 int buscarYEliminarEnCola(t_queue* cola, int pid){
 
+	log_debug(archivoLogDebug, "entre a buscar tu cola");
 	pcb_t* pcb = malloc(sizeof(pcb_t));
 	t_queue* queueAuxiliar = queue_create();
 	int encontrado = 0;
-
 	//Busco en la queue que viene por parametro, si se encuentra lo elimina y marca el flag como encontrado
+	pthread_mutex_lock(&mutexCola);
 	while(!queue_is_empty(cola)){
 
 		pcb = queue_pop(cola);
 
 		if(pcb->processID == pid){
-
+			pcb->flagFinalizar =1;
 			encontrado++;
+			log_debug(archivoLogDebug, "i found it bro");
 
-			int tamanioPaquete = sizeof(int) * 2;
+			/*int tamanioPaquete = sizeof(int) * 2;
 			char* paquete = malloc(tamanioPaquete);
 			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
 
 			send(clienteCPUPadre, paquete, tamanioPaquete, 0);
+			log_debug(archivoLogDebug, "mande finalizar a cpu");
 
 			free(paquete);
 
 			int* notificacion = malloc(sizeof(int));
 			recibirYDeserializarInt(notificacion, clienteCPUPadre);
+			log_debug(archivoLogDebug, "recibi notificacion: %i", *notificacion);
 
 			if(*notificacion != -1){
 				log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
@@ -355,7 +358,8 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 			}
 
 			free(notificacion);
-			free(paquete);
+			free(paquete);*/
+			queue_push(queueAuxiliar, pcb);
 
 		}else{
 
@@ -371,6 +375,7 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 		queue_push(cola, pcb);
 
 	}
+	pthread_mutex_unlock(&mutexCola);
 
 	if(encontrado)
 		return 0;
@@ -382,19 +387,19 @@ void estadoProcesos(){
 
 	log_debug(archivoLogDebug, "Entré a estadoProcesos");
 
-
-
 	// Me voy fijando si las colas no son vacias, saco a variable aux y logueo
 	if(!queue_is_empty(queueReady)){
 		pthread_mutex_lock(&mutexQueueReady);
 		logueoEstados(queueReady);
 		pthread_mutex_unlock(&mutexQueueReady);
 	}
+	log_debug(archivoLogDebug, "sali del primer if");
 	if(!queue_is_empty(queueBlocked)){
 		pthread_mutex_lock(&mutexQueueBlocked);
 		logueoEstadosBlock(queueBlocked);
 		pthread_mutex_unlock(&mutexQueueBlocked);
 	}
+	log_debug(archivoLogDebug, "sali del segundo if");
 	if(!queue_is_empty(queueRunning)){
 		pthread_mutex_lock(&mutexQueueRunning);
 		logueoEstados(queueRunning);
@@ -405,6 +410,7 @@ void estadoProcesos(){
 
 void logueoEstados(t_queue* cola){
 
+	log_debug(archivoLogDebug, "ENTRE A LOGUEO ESTADOS");
 	pcb_t* pcb;
 	t_queue* queueAux;
 	queueAux = queue_create();
@@ -503,48 +509,44 @@ void comandoCPU(){
 
 	while(!queue_is_empty(queueAux)){
 		cpuMetrica = queue_pop(queueAux);
-		queue_push(queueCPU, cpuMetrica);
+		queue_push(queueCPULibre, cpuMetrica);
 	}
 	pthread_mutex_unlock(&mutexQueueCPULibre);
 
 	//RECIBO DE LA QUEUE CPU Y LOGUEO
+	pthread_mutex_lock(&mutexQueueCPU);
 	int paqueteMetrica;
 	for(i = 0; i < queue_size(queueCPU); i++){
-	pthread_mutex_lock(&mutexQueueCPU);
 
 	cpuMetrica = queue_pop(queueCPU);
 	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
 
 	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica->CPUMetrica, paqueteMetrica);
 	queue_push(queueAux, cpuMetrica);
-	log_debug(archivoLogDebug, "ROMPI EN EL PUSH");
 	}
 
-	log_debug(archivoLogDebug, "ROMPI DPS DEL FOR");
 	while(!queue_is_empty(queueAux)){
 		cpuMetrica = queue_pop(queueAux);
 		queue_push(queueCPU, cpuMetrica);
 	}
-	log_debug(archivoLogDebug,"ROMPI DESPUES DEL WHILE");
+
 	pthread_mutex_unlock(&mutexQueueCPU);
 
 	//RECIBO DE LA QUEUE CPULIBRE Y LOGUEO
+	pthread_mutex_lock(&mutexQueueCPULibre);
 	for(i = 0; i < queue_size(queueCPULibre); i++){
 	int paqueteMetrica;
-	pthread_mutex_lock(&mutexQueueCPULibre);
 	cpuMetrica2 = queue_pop(queueCPULibre);
 	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica2->CPUMetrica);
 	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica2->CPUMetrica, paqueteMetrica);
-	log_debug(archivoLogDebug, "antes del push de libres");
 	queue_push(queueAux, cpuMetrica2);
 	}
 
-	log_debug(archivoLogDebug, "despues del for libres");
 	while(!queue_is_empty(queueAux)){
 		cpuMetrica2 = queue_pop(queueAux);
-		queue_push(queueCPU, cpuMetrica2);
+		queue_push(queueCPULibre, cpuMetrica2);
 	}
-	log_debug(archivoLogDebug, "antes de terminar la funcion cpu");
+
 	pthread_mutex_unlock(&mutexQueueCPULibre);
 	queue_destroy(queueAux);
 }
@@ -552,8 +554,8 @@ void comandoCPU(){
 void planificador() {
 	log_debug(archivoLog, "Empieza el thread planificador.\n");
 
-	cpu_t* cpu = malloc(sizeof(cpu_t));
-	pcb_t* pcb = malloc(sizeof(pcb_t));
+	cpu_t* cpu;// = malloc(sizeof(cpu_t));
+	pcb_t* pcb;// = malloc(sizeof(pcb_t));
 
 	while(1){
 		pthread_mutex_lock(&mutexPlanificador);
@@ -709,12 +711,15 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 	log_debug(archivoLogDebug, "Empieza el hilo de proceso corriendo, proceso: %i.", pcb->processID);
 
-	//Envio el proceso que va a correr despues
 	int tamanioPaquete = sizeof(int) * 4 + strlen(pcb->path) + 1;
 	char* paquete = malloc(tamanioPaquete);
 
+	if(pcb->flagFinalizar == 1){
+		serializarChar(serializarInt(serializarInt(serializarInt(paquete,FINALIZARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
+	}else{
+	//Envio el proceso que va a correr despues
 	serializarChar(serializarInt(serializarInt(serializarInt(paquete,INICIARPROCESO), pcb->processID), pcb->programCounter),pcb->path);
-
+	}
 	log_info(archivoLogObligatorio, "Comienza la ejecución del proceso %i: %s", pcb->processID, pcb->path);
 	send(cpu->cliente, paquete, tamanioPaquete, 0);
 
