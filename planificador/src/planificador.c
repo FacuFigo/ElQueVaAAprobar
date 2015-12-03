@@ -72,6 +72,7 @@ pthread_mutex_t mutexPlanificador;
 pthread_mutex_t mutexEntradaSalida;
 
 int pIDContador = 1;
+int cantidadCPUs;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
@@ -469,16 +470,30 @@ void logueoEstadosBlock(t_queue* cola){
 void comandoCPU(){
 	t_queue* queueAux;
 	cpu_t* cpuMetrica;
+	cpu_t* cpuMetrica2;
+	int i;
 	int tamanioPaquete = sizeof(int);
 	char* paquete = malloc(tamanioPaquete);
 	queueAux = queue_create();
 	serializarInt(paquete, PEDIDOMETRICA);
 
-	log_debug(archivoLogDebug, "entre a la funcion");
 	pthread_mutex_lock(&mutexQueueCPU);
 	while(!queue_is_empty(queueCPU)){
-		//TODO poner un sockt que sE CONECte al hilo dentro del hilo
 		cpuMetrica = queue_pop(queueCPU);
+		send(cpuMetrica->CPUMetrica, paquete, tamanioPaquete, 0);
+		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpuMetrica->CPUMetrica);
+		queue_push(queueAux, cpuMetrica);
+	}
+
+	while(!queue_is_empty(queueAux)){
+		cpuMetrica = queue_pop(queueAux);
+		queue_push(queueCPU, cpuMetrica);
+	}
+	pthread_mutex_unlock(&mutexQueueCPU);
+
+	pthread_mutex_lock(&mutexQueueCPULibre);
+	while(!queue_is_empty(queueCPULibre)){
+		cpuMetrica = queue_pop(queueCPULibre);
 		send(cpuMetrica->CPUMetrica, paquete, tamanioPaquete, 0);
 		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpuMetrica->CPUMetrica);
 		queue_push(queueAux, cpuMetrica);
@@ -490,15 +505,48 @@ void comandoCPU(){
 		cpuMetrica = queue_pop(queueAux);
 		queue_push(queueCPU, cpuMetrica);
 	}
+	pthread_mutex_unlock(&mutexQueueCPULibre);
 
-	queue_destroy(queueAux);
+	//RECIBO DE LA QUEUE CPU Y LOGUEO
+	int paqueteMetrica;
+	for(i = 0; i < queue_size(queueCPU); i++){
+	pthread_mutex_lock(&mutexQueueCPU);
+
+	cpuMetrica = queue_pop(queueCPU);
+	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
+
+	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica->CPUMetrica, paqueteMetrica);
+	queue_push(queueAux, cpuMetrica);
+	log_debug(archivoLogDebug, "ROMPI EN EL PUSH");
+	}
+
+	log_debug(archivoLogDebug, "ROMPI DPS DEL FOR");
+	while(!queue_is_empty(queueAux)){
+		cpuMetrica = queue_pop(queueAux);
+		queue_push(queueCPU, cpuMetrica);
+	}
+	log_debug(archivoLogDebug,"ROMPI DESPUES DEL WHILE");
 	pthread_mutex_unlock(&mutexQueueCPU);
 
+	//RECIBO DE LA QUEUE CPULIBRE Y LOGUEO
+	for(i = 0; i < queue_size(queueCPULibre); i++){
 	int paqueteMetrica;
-	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
-	log_debug(archivoLogDebug, "CPU %i: %i", cpuMetrica->CPUMetrica, paqueteMetrica);
+	pthread_mutex_lock(&mutexQueueCPULibre);
+	cpuMetrica2 = queue_pop(queueCPULibre);
+	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica2->CPUMetrica);
+	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica2->CPUMetrica, paqueteMetrica);
+	log_debug(archivoLogDebug, "antes del push de libres");
+	queue_push(queueAux, cpuMetrica2);
+	}
 
-
+	log_debug(archivoLogDebug, "despues del for libres");
+	while(!queue_is_empty(queueAux)){
+		cpuMetrica2 = queue_pop(queueAux);
+		queue_push(queueCPU, cpuMetrica2);
+	}
+	log_debug(archivoLogDebug, "antes de terminar la funcion cpu");
+	pthread_mutex_unlock(&mutexQueueCPULibre);
+	queue_destroy(queueAux);
 }
 
 void planificador() {
@@ -794,7 +842,6 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 }
 
 void esperarConexiones(){
-	int cantidadCPUs;
 
 	//Configuracion del Servidor
 	configurarSocketServidor();
