@@ -30,6 +30,7 @@
 #include <sockets.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <semaphore.h>
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -57,6 +58,9 @@ int threadCounter;
 int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
 int* instruccionesEjecutadas;
+int planiVive = 1;
+
+sem_t comando;
 
 pthread_mutex_t mutexMetricas;
 pthread_mutex_t mutex;
@@ -69,7 +73,7 @@ void finalizarmProc(int pID);
 void escribirmProc(int pID, int nroPagina, char* texto);
 void ejecutarmProc();
 void comandoCPU();
-void timer_handler(int signum, int* instruccionesEjecuciones);
+void timer_handler(int signum);
 
 int main(int argc, char** argv) {
 
@@ -84,7 +88,7 @@ int main(int argc, char** argv) {
 	instruccionesEjecutadas = malloc(sizeof(int) * cantidadHilos);
 
 	int f;
-		for(f = 0; f < cantidadHilos; f++){
+		for(f = 0; f < cantidadHilos; f++){   //inicializa en 0
 			instruccionesEjecutadas[f]=0;
 		}
 
@@ -121,6 +125,21 @@ int main(int argc, char** argv) {
 		pthread_create(&hilos, NULL, (void *) ejecutarmProc, NULL);
 		log_info(archivoLog, "Instancia de CPU %i creada.\n", threadCounter);
 	}
+
+	struct sigaction sa;               //arranca el temporizador
+	struct itimerval timer;
+
+	memset (&sa, 0, sizeof (sa));
+	sa.sa_handler = &timer_handler;
+	sigaction (SIGALRM, &sa, NULL);
+
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_sec =60;
+
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_sec = 60;
+
+	setitimer (ITIMER_REAL, &timer, NULL);  //termina el temporizador
 
 	for(threadCounter = 0; threadCounter < cantidadHilos; threadCounter++ ){
 		pthread_join(hilos,NULL);
@@ -457,26 +476,6 @@ void ejecutarmProc() {
 			instruccionesEjecutadas[numeroCPU]++;
 			log_info(archivoLog, " las instrucciones ejecutadas son: %i", instruccionesEjecutadas[numeroCPU]);
 
-
-			struct sigaction sa;
-			struct itimerval timer;
-
-
-			memset (&sa, 0, sizeof (sa));
-			sa.sa_handler = &timer_handler;
-			sigaction (SIGVTALRM, &sa, NULL);
-
-
-			timer.it_value.tv_sec = 0;
-			timer.it_value.tv_sec = 30;
-
-			timer.it_interval.tv_sec = 0;
-			timer.it_interval.tv_sec = 30;
-
-			setitimer (ITIMER_VIRTUAL, &timer, NULL);
-
-
-
 			sleep(retardo);
 
 			if (quantum != -1) {
@@ -548,6 +547,7 @@ void ejecutarmProc() {
 		}
 	} 	//fin while(continuar)
 	log_info(archivoLog, "Mi intempestiva muerte llego intempestivamente!!!");
+	//sem_post(&comando);
 }       //fin ejecutarmProc
 
 
@@ -563,6 +563,7 @@ void comandoCPU(){
 
 	int numeroCPU;
 	recibirYDeserializarInt(&numeroCPU, socketMetricas);
+
 
 	pthread_mutex_unlock(&mutex);
 
@@ -593,15 +594,12 @@ void comandoCPU(){
 }
 
 
-void timer_handler (int signum, int* instruccionesEjecutadas)
+void timer_handler (int signum)
 {
-
-	log_info(archivoLog, "Entro al timer handler");
-	pthread_mutex_lock(&mutexMetricas);
 	int i;
 	for(i = 0; i < cantidadHilos; i++){
 		instruccionesEjecutadas[i]=0;
 	}
-	pthread_mutex_unlock(&mutexMetricas);
+
 }
 
