@@ -132,6 +132,7 @@ void entradaSalida();
 void procesoCorriendo(procesoCorriendo_t* proceso);
 void logueoEstados(t_queue* cola);
 void logueoEstadosBlock(t_queue* cola);
+void matarProceso(pcb_t* pcb);
 
 int main(int argc, char** argv) {
 
@@ -294,6 +295,7 @@ void correrProceso(char* path) {
 }
 
 void generarPCB(pcb_t* pcb){
+
 	pcb->flagFinalizar = 0;
 	pcb->processID = pIDContador;
 	pcb->programCounter = 0;
@@ -385,34 +387,29 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 
 void estadoProcesos(){
 
-	log_debug(archivoLogDebug, "Entré a estadoProcesos");
-
 	// Me voy fijando si las colas no son vacias, saco a variable aux y logueo
 	if(!queue_is_empty(queueReady)){
 		pthread_mutex_lock(&mutexQueueReady);
 		logueoEstados(queueReady);
 		pthread_mutex_unlock(&mutexQueueReady);
 	}
-	log_debug(archivoLogDebug, "sali del primer if");
 	if(!queue_is_empty(queueBlocked)){
 		pthread_mutex_lock(&mutexQueueBlocked);
 		logueoEstadosBlock(queueBlocked);
 		pthread_mutex_unlock(&mutexQueueBlocked);
 	}
-	log_debug(archivoLogDebug, "sali del segundo if");
 	if(!queue_is_empty(queueRunning)){
 		pthread_mutex_lock(&mutexQueueRunning);
 		logueoEstados(queueRunning);
 		pthread_mutex_unlock(&mutexQueueRunning);
 	}
-	log_debug(archivoLogDebug, "Estados logueados, saliendo de ps");
 }
 
 void logueoEstados(t_queue* cola){
 
-	log_debug(archivoLogDebug, "ENTRE A LOGUEO ESTADOS");
 	pcb_t* pcb;
 	t_queue* queueAux;
+	char* resultado;
 	queueAux = queue_create();
 
 	while(!queue_is_empty(cola)){
@@ -420,13 +417,15 @@ void logueoEstados(t_queue* cola){
 		switch (pcb->estadoProceso){
 
 			case READY:{
-				log_debug(archivoLogDebug, "mProc %i: %s -> Listo", pcb->processID, pcb->path);
+				resultado = string_from_format("mProc %i: %s -> Listo.\n", pcb->processID, pcb->path);
+				fputs(resultado, stdout);
 				queue_push(queueAux, pcb);
 				break;
 			}
 
 			case RUNNING:{
-				log_debug(archivoLogDebug, "mProc %i: %s -> Ejecutando", pcb->processID, pcb->path);
+				resultado = string_from_format("mProc %i: %s -> Ejecutando.\n", pcb->processID, pcb->path);
+				fputs(resultado, stdout);
 				queue_push(queueAux, pcb);
 				break;
 			}
@@ -448,6 +447,7 @@ void logueoEstados(t_queue* cola){
 void logueoEstadosBlock(t_queue* cola){
 	procesoBlocked_t* proceso;
 	t_queue* queueAux;
+	char* resultado;
 	queueAux = queue_create();
 
 	while(!queue_is_empty(cola)){
@@ -456,7 +456,8 @@ void logueoEstadosBlock(t_queue* cola){
 			switch (proceso->pcb->estadoProceso){
 
 				case BLOCKED:{
-					log_debug(archivoLogDebug, "mProc %i: %s -> Bloqueado", proceso->pcb->processID, proceso->pcb->path);
+					resultado = string_from_format("mProc %i: %s -> Bloqueado.\n", proceso->pcb->processID, proceso->pcb->path);
+					fputs(resultado, stdout);
 					queue_push(queueAux, proceso);
 					break;
 				}
@@ -477,6 +478,7 @@ void comandoCPU(){
 	t_queue* queueAux;
 	cpu_t* cpuMetrica;
 	cpu_t* cpuMetrica2;
+	char* resultado;
 	int i;
 	int tamanioPaquete = sizeof(int);
 	char* paquete = malloc(tamanioPaquete);
@@ -521,7 +523,8 @@ void comandoCPU(){
 	cpuMetrica = queue_pop(queueCPU);
 	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
 
-	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica->CPUMetrica, paqueteMetrica);
+	resultado = string_from_format("CPU %i: %i\%\n", cpuMetrica->CPUMetrica, paqueteMetrica);
+	fputs(resultado, stdout);
 	queue_push(queueAux, cpuMetrica);
 	}
 
@@ -538,7 +541,8 @@ void comandoCPU(){
 	int paqueteMetrica;
 	cpuMetrica2 = queue_pop(queueCPULibre);
 	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica2->CPUMetrica);
-	log_debug(archivoLogDebug, "CPU %i: %i\%\n", cpuMetrica2->CPUMetrica, paqueteMetrica);
+	resultado = string_from_format("CPU %i: %i\%\n", cpuMetrica2->CPUMetrica, paqueteMetrica);
+	fputs(resultado, stdout);
 	queue_push(queueAux, cpuMetrica2);
 	}
 
@@ -548,6 +552,30 @@ void comandoCPU(){
 	}
 
 	pthread_mutex_unlock(&mutexQueueCPULibre);
+	queue_destroy(queueAux);
+}
+
+matarProceso(pcb_t* pcb){
+	pcb_t* aux;
+	t_queue* queueAux;
+
+	queueAux = queue_create();
+
+	while(!queue_is_empty(queueRunning)){
+
+		aux = queue_pop(queueRunning);
+		if(pcb->processID == aux->processID)
+			free(pcb);
+
+	while(!queue_is_empty(queueAux)){
+
+		pthread_mutex_lock(&mutexQueueRunning);
+		aux = queue_pop(queueAux);
+		queue_push(queueRunning, aux);
+		pthread_mutex_unlock(&mutexQueueRunning);
+	}
+	}
+
 	queue_destroy(queueAux);
 }
 
@@ -800,7 +828,10 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s.\n ", *numeroProceso, pcb->path);
 			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 
-			free(pcb);
+			pthread_mutex_lock(&mutexQueueRunning);
+			matarProceso(pcb);
+			pthread_mutex_unlock(&mutexQueueRunning);
+
 			break;
 		}
 		case FALLOPROCESO:{
