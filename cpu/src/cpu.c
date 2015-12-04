@@ -58,6 +58,7 @@ int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
 int* instruccionesEjecutadas;
 int planiVive = 1;
+int retardoTotal;
 
 
 pthread_mutex_t mutexMetricas;
@@ -116,6 +117,14 @@ int main(int argc, char** argv) {
 
 	recibirYDeserializarInt(&tamanioMarco, socketMemoria);
 	log_info(archivoLog, "Recibi tamanio pagina %i", tamanioMarco);
+
+	//aca recibe el retardo total de memoria y se lo suma al retardo de cpu
+
+	recibirYDeserializarInt(&retardoTotal, socketMemoria);
+	log_info(archivoLog,"Recibi retardo de memoria %i", retardoTotal);
+	retardoTotal+=retardo;
+	log_info(archivoLog,"El retardo total es:%i", retardoTotal);
+
 
 	pthread_t hilos;
 
@@ -577,7 +586,7 @@ void comandoCPU(){
 		//maximoPosible es el tema que hay que ver como se calcula.
 		//maxPosibleMinuto = 60 / retardo cpu (o retardoTotal)
 		//swap le manda a memoria su retardo. Memoria lo suma con el suyo y nos lo manda a cpu. Ahi nosotros lo sumamos al nuestro, y dividimos 60 por esa suma
-		porcentaje= instruccionesEjecutadas[numeroCPU]*10;
+		porcentaje= (instruccionesEjecutadas[numeroCPU]*100)/(60/retardoTotal);
 		log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 		pthread_mutex_unlock(&mutexMetricas);
 
