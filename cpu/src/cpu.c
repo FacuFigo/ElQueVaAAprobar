@@ -30,7 +30,6 @@
 #include <sockets.h>
 #include <signal.h>
 #include <sys/time.h>
-#include <semaphore.h>
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -59,8 +58,8 @@ int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
 int* instruccionesEjecutadas;
 int planiVive = 1;
+int retardoTotal;
 
-sem_t comando;
 
 pthread_mutex_t mutexMetricas;
 pthread_mutex_t mutex;
@@ -118,6 +117,14 @@ int main(int argc, char** argv) {
 
 	recibirYDeserializarInt(&tamanioMarco, socketMemoria);
 	log_info(archivoLog, "Recibi tamanio pagina %i", tamanioMarco);
+
+	//aca recibe el retardo total de memoria y se lo suma al retardo de cpu
+
+	recibirYDeserializarInt(&retardoTotal, socketMemoria);
+	log_info(archivoLog,"Recibi retardo de memoria %i", retardoTotal);
+	retardoTotal+=retardo;
+	log_info(archivoLog,"El retardo total es:%i", retardoTotal);
+
 
 	pthread_t hilos;
 
@@ -547,7 +554,6 @@ void ejecutarmProc() {
 		}
 	} 	//fin while(continuar)
 	log_info(archivoLog, "Mi intempestiva muerte llego intempestivamente!!!");
-	//sem_post(&comando);
 }       //fin ejecutarmProc
 
 
@@ -575,7 +581,12 @@ void comandoCPU(){
 	switch(comando){
 	case PEDIDOMETRICA:{
 		pthread_mutex_lock(&mutexMetricas);
-		porcentaje= instruccionesEjecutadas[numeroCPU]*10;
+		//la regla de 3 seria:  maximoPosibleDeInstEn60Seg ----> %100
+		//						instruccionesEjecutadas -------> %X  por lo tanto la cuenta del porcentaje seria (instEjec*100)/maxPos60Seg
+		//maximoPosible es el tema que hay que ver como se calcula.
+		//maxPosibleMinuto = 60 / retardo cpu (o retardoTotal)
+		//swap le manda a memoria su retardo. Memoria lo suma con el suyo y nos lo manda a cpu. Ahi nosotros lo sumamos al nuestro, y dividimos 60 por esa suma
+		porcentaje= (instruccionesEjecutadas[numeroCPU]*100)/(60/retardoTotal);
 		log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 		pthread_mutex_unlock(&mutexMetricas);
 
@@ -597,6 +608,7 @@ void comandoCPU(){
 void timer_handler (int signum)
 {
 	int i;
+//pensar en mutex
 	for(i = 0; i < cantidadHilos; i++){
 		instruccionesEjecutadas[i]=0;
 	}
