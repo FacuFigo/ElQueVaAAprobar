@@ -85,6 +85,8 @@ int socketSwap;
 int clienteCPU;
 void* memoriaPrincipal;
 int* marcos;
+int aciertosTLB=0;
+int accesosTLB=0;
 algoritmo_t algoritmoDeReemplazo = FIFO;
 t_dictionary *tablaDeProcesos;
 t_dictionary *tablaDeProcesosCM;
@@ -123,6 +125,8 @@ void memoryFlush();
 void limpiarProceso(char* key, t_dictionary *value);
 void limpiarProcesoCM(char* key, t_list *value);
 void limpiarPaginaYActualizarSwap (char* key, pagina_t *value);
+void calculoTasaTLB();
+int hayMarcoLibre();
 
 int main(int argc, char** argv) {
 	//Creo el archivo de logs
@@ -168,7 +172,9 @@ int main(int argc, char** argv) {
 		}
 	//admDeMemoria();
 	pthread_t hiloMemoria;
+	pthread_t hiloTasaTLB;
 	pthread_create(&hiloMemoria, NULL, (void *)admDeMemoria, NULL);
+	pthread_create(&hiloTasaTLB, NULL, (void *)calculoTasaTLB, NULL);
 
 	pthread_join(hiloMemoria, NULL);
 
@@ -196,12 +202,12 @@ void configurarAdmMemoria(char* config) {
 		TLBHabilitada = string_duplicate(config_get_string_value(configurarAdmMemoria, "TLB_HABILITADA"));
 	if (config_has_property(configurarAdmMemoria, "RETARDO_MEMORIA"))
 		retardoMemoria = config_get_int_value(configurarAdmMemoria, "RETARDO_MEMORIA");
-	if (config_has_property(configurarAdmMemoria, "ALGORITMO_TLB")){
-		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"FIFO"))
+	if (config_has_property(configurarAdmMemoria, "ALGORITMO_REEMPLAZO")){
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_REEMPLAZO"),"FIFO"))
 				algoritmoDeReemplazo = FIFO;
-		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"LRU"))
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_REEMPLAZO"),"LRU"))
 				algoritmoDeReemplazo = LRU;
-		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_TLB"),"CLOCKMEJORADO"))
+		if(string_equals_ignore_case(config_get_string_value(configurarAdmMemoria, "ALGORITMO_REEMPLAZO"),"CLOCK_MEJORADO"))
 				algoritmoDeReemplazo = CLOCKMEJORADO;
 	}
 	config_destroy(configurarAdmMemoria);
@@ -312,8 +318,10 @@ void admDeMemoria(){
 				recibirYDeserializarInt(&pid, clienteCPU);
 				recibirYDeserializarInt(&pagina, clienteCPU);
 
-				if (tlbHabilitada())
+				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYLeer(pid,pagina,contenido);
+
+				}
 				if(!tlbHit)//tlb miss o tlb deshabilitada
 					verificador=leerMemoria(pid,pagina,contenido);
 
@@ -458,19 +466,19 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	t_dictionary *tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	pagina_t *paginaALeer = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	if (paginaALeer->bitPresencia==0){//fallo de pagina
-		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
+		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso && hayMarcoLibre()){//asigna un nuevo marco
 					paginaALeer->nroMarco = asignarNuevoMarco();
-					if (paginaALeer->nroMarco==-1){
-						log_info(archivoLog,"Error al asignar un nuevo marco, el proceso se finalizará incorrectamente.");
-						finalizarProceso(pid);
-						return -1;
-					}
 					if(algoritmoDeReemplazo==CLOCKMEJORADO){
 						t_list *punteroClockMejorado = dictionary_get(tablaDeProcesosCM,string_itoa(pid));
 						list_add(punteroClockMejorado,paginaALeer);
 					}
 					log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 		}else{
+			if (cantidadMarcosAsignados(tablaDePaginas)==0){
+				log_info(archivoLog,"Error al asignar el primer marco, el proceso se finalizará incorrectamente.");
+				finalizarProceso(pid);
+				return -1;
+			}
 			//reemplaza un marco
 			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 			int paginaAReemplazar= paginaAReemplazarPorAlgoritmo(tablaDePaginas);
@@ -525,14 +533,9 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	pagina_t *paginaAEscribir = dictionary_get(tablaDePaginas, string_itoa(pagina));
 	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",paginaAEscribir->nroMarco);
 	if (paginaAEscribir->bitPresencia==0){//fallo de pagina
-		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso){//asigna un nuevo marco
+		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso && hayMarcoLibre()){//asigna un nuevo marco
 			log_info(archivoLog,"Antes de asignar un marco nuevo\n");
 			paginaAEscribir->nroMarco = asignarNuevoMarco();
-			if (paginaAEscribir->nroMarco==-1){
-				log_info(archivoLog,"Error al asignar un nuevo marco, el proceso se finalizará incorrectamente.");
-				finalizarProceso(pid);
-				return -1;
-			}
 			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",paginaAEscribir->nroMarco);
 			if(algoritmoDeReemplazo==CLOCKMEJORADO){
 				t_list *punteroClockMejorado = dictionary_get(tablaDeProcesosCM,string_itoa(pid));
@@ -540,6 +543,11 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			}
 			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 		}else{//reemplaza un marco
+			if (cantidadMarcosAsignados(tablaDePaginas)==0){
+				log_info(archivoLog,"Error al asignar el primer marco, el proceso se finalizará incorrectamente.");
+				finalizarProceso(pid);
+				return -1;
+			}
 			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 			log_info(archivoLog,"Empieza el algoritmo de reemplazo\n");
 			int paginaAReemplazar = paginaAReemplazarPorAlgoritmo(tablaDePaginas);
@@ -919,4 +927,29 @@ void limpiarPaginaYActualizarSwap (char* key, pagina_t *value){
 		free(aux);
 	}
 	value->bitModificado = 0;
+}
+
+void calculoTasaTLB(){
+	int tasaAcierto=0;
+	while(1){
+		sleep(60);
+		if (!accesosTLB){
+			tasaAcierto=(100*aciertosTLB)/accesosTLB;
+			aciertosTLB=0;
+			accesosTLB=0;
+			log_info(archivoLog,"La tasa de aciertos de la TLB es: %i \% \n",tasaAcierto);
+		}else{
+			log_info(archivoLog,"La tasa de aciertos de la TLB es: NA \n");
+		}
+	}
+}
+
+int hayMarcoLibre(){
+	int hayMarco=0,i=0;
+	for(i=0;(i<cantidadMarcos)&&(!hayMarco);i++){
+		if(marcos[i]==0){
+			hayMarco=1;
+		}
+	}
+	return hayMarco;
 }
