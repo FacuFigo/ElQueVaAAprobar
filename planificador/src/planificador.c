@@ -44,7 +44,8 @@ typedef enum {
 	FINALIZARPROCESO = 5,
 	RAFAGAPROCESO = 6,
 	FALLOPROCESO = 7,
-	PEDIDOMETRICA = 8
+	PEDIDOMETRICA = 8,
+	PATHINVALIDO = 9
 } operacion_t;
 t_log* archivoLog;
 t_log* archivoLogObligatorio;
@@ -779,9 +780,6 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		case FALLOPROCESO:{
 			log_debug(archivoLogDebug, "entre al case FALLOPROCESO");
 
-			char* resultadoRafaga;
-			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
-
 			int* numeroProceso = malloc(sizeof(int));
 			*numeroProceso = pcb->processID;
 
@@ -790,6 +788,14 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			pthread_mutex_unlock(&mutexQueueRunning);
 
 			log_debug(archivoLogDebug, "el proceso murio intempestivamente!!!!");
+			break;
+		}
+		case PATHINVALIDO: {
+			log_debug(archivoLogDebug, "entre al case PATHINVALIDO");
+
+			pthread_mutex_lock(&mutexQueueRunning);
+			matarProceso(pcb);
+			pthread_mutex_unlock(&mutexQueueRunning);
 			break;
 		}
 	}
