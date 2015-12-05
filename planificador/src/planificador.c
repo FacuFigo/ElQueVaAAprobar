@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
 	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
-	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
+	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 0, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
 
@@ -508,14 +508,14 @@ void matarProceso(pcb_t* pcb){
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID)
 			free(pcb);
+		else
+			queue_push(queueAux, aux);
+	}
 
 	while(!queue_is_empty(queueAux)){
 
-		pthread_mutex_lock(&mutexQueueRunning);
 		aux = queue_pop(queueAux);
 		queue_push(queueRunning, aux);
-		pthread_mutex_unlock(&mutexQueueRunning);
-	}
 	}
 
 	queue_destroy(queueAux);

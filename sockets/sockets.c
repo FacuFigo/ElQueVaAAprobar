@@ -6,6 +6,7 @@
  */
 
 #include "sockets.h"
+#include <stdio.h>
 #include <stdint.h>
 #include <netdb.h>
 #include <string.h>
@@ -35,12 +36,14 @@ int recibirYDeserializarChar(char **package, int socketCliente) {
 	int status;
 	int buffer_size;
 	char *buffer = malloc(buffer_size = sizeof(uint32_t));
-	uint32_t message_long;
+	uint32_t message_long=0;
 	status = recv(socketCliente, buffer, buffer_size, 0);
 	memcpy(&(message_long), buffer, buffer_size);
 	if (!status)
 		return 0;
 	*package = malloc(message_long);
+	if(*package == NULL)
+		puts("EERROR EN EL MALLOC DE RECIBIR Y DESERIALIZARZAZAZAR");
 	status = recv(socketCliente, *package, message_long, 0);
 	if (!status)
 		return 0;
