@@ -32,7 +32,7 @@
 #include <commons/collections/dictionary.h>
 #include <sockets.h>
 
-#define BACKLOG 5
+#define BACKLOG 10
 
 t_log* archivoLog;
 t_log* archivoLogPrueba;
@@ -310,18 +310,19 @@ void admDeMemoria(){
 				int pid, pagina, tamanioPaquete, verificador, tlbHit=0;
 				char *paquete;
 				//void* contenido = calloc(1,tamanioMarco);
-				void* contenido = malloc(tamanioMarco);
+				void* contenido = calloc(1,tamanioMarco);
 				if(contenido == NULL)
 					log_info(archivoLog,"Error en el malloc");
-				memset(contenido,0,tamanioMarco);
+				//memset(contenido,0,tamanioMarco);
 				log_info(archivoLog,"sizeof de contenido:%i",sizeof(contenido));
 				recibirYDeserializarInt(&pid, clienteCPU);
 				recibirYDeserializarInt(&pagina, clienteCPU);
 
 				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYLeer(pid,pagina,contenido);
-
+					log_info(archivoLog,"Después de buscar en tlb y leer");
 				}
+
 				if(!tlbHit)//tlb miss o tlb deshabilitada
 					verificador=leerMemoria(pid,pagina,contenido);
 
@@ -369,7 +370,7 @@ void admDeMemoria(){
 					serializarChar(serializarInt(paquete, verificador),contenido);
 					free(contenido);
 				}else{
-					log_info(archivoLog,"Fallo al escribir página %d.", pagina);
+					log_info(archivoLog,"Fallo al escribir página %d. verificador: %i", pagina,verificador);
 					tamanioPaquete = sizeof(int);
 					paquete = malloc(sizeof(int));
 					serializarInt(paquete,verificador);
@@ -876,7 +877,7 @@ void signalHandler (int signal){
 				if(marcos[i]==1){
 					memset(contenido,0,tamanioMarco);
 					memcpy(contenido,memoriaPrincipal+i*tamanioMarco,tamanioMarco);
-					log_info(archivoLog,"Marco %i, contenido: %s",i,contenido);
+					log_info(archivoLogPrueba,"Marco %i, contenido: %s",i,contenido);
 				}
 			}
 			exit(0);
@@ -933,7 +934,7 @@ void calculoTasaTLB(){
 	int tasaAcierto=0;
 	while(1){
 		sleep(60);
-		if (!accesosTLB){
+		if (accesosTLB){
 			tasaAcierto=(100*aciertosTLB)/accesosTLB;
 			aciertosTLB=0;
 			accesosTLB=0;
@@ -946,10 +947,11 @@ void calculoTasaTLB(){
 
 int hayMarcoLibre(){
 	int hayMarco=0,i=0;
-	for(i=0;(i<cantidadMarcos)&&(!hayMarco);i++){
+	while(i<cantidadMarcos && !hayMarco){
 		if(marcos[i]==0){
 			hayMarco=1;
 		}
+		i++;
 	}
 	return hayMarco;
 }

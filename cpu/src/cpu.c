@@ -256,7 +256,6 @@ void ejecutarmProc() {
 
 	char comandoLeido[tamanioComando];
 
-	quantumRafaga = quantum;
 
 	pthread_mutex_lock(&mutex);
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
@@ -275,6 +274,7 @@ void ejecutarmProc() {
 
 	while (continuar) {
 
+		quantumRafaga = quantum;
 		entradaSalida = 0;
 
 		char* resultadosTot = string_new();
@@ -301,6 +301,9 @@ void ejecutarmProc() {
 					"/home/utnso/tp-2015-2c-elquevaaaprobar/scripts/%s", path);
 
 			mCod = fopen(ruta, "r");
+
+			free(ruta);
+			free(path);
 
 			if (mCod) {
 
@@ -411,7 +414,7 @@ void ejecutarmProc() {
 
 							if (verificador != -1) {
 
-								char* resultado = malloc(sizeof(char) * 25);
+								char* resultado;
 								recibirYDeserializarChar(&resultado,
 										socketMemoria);
 								log_info(archivoLog,
@@ -445,12 +448,13 @@ void ejecutarmProc() {
 								"escribir")) {
 
 							int nroPagina = valor;
-							char* texto = malloc(tamanioMarco);
 							char* textoCorregido = string_substring(
 									leidoSplit[2], 1,
 									strlen(leidoSplit[2]) - 4); //Esto corrige el texto
 
 							escribirmProc(pID, nroPagina, textoCorregido);
+
+							free(textoCorregido);
 
 							int verificador;
 							recibirYDeserializarInt(&verificador,
@@ -458,6 +462,7 @@ void ejecutarmProc() {
 
 							if (verificador != -1) {
 
+								char* texto;
 								recibirYDeserializarChar(&texto, socketMemoria);
 								log_info(archivoLog,
 										"Instruccion ejecutada: escribir %d %s Proceso: %d Resultado: %s.\n",
@@ -467,13 +472,15 @@ void ejecutarmProc() {
 										pID, nroPagina, texto);
 								string_append(&resultadosTot, aux);
 
+								free(texto);
+
 								free(aux);
 
 							} else {
 
 								log_info(archivoLog,
 										"Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura",
-										nroPagina, texto, pID);
+										nroPagina, leidoSplit[2], pID);//TODO CAMBIAR ESTO
 
 								operacion = FALLOPROCESO; //EN CASO DE QUE QUIERA ESCRIBIR ALGO QUE NO SE PUEDE
 								break;
@@ -536,8 +543,14 @@ void ejecutarmProc() {
 								" las instrucciones ejecutadas son: %i",
 								instruccionesEjecutadas[numeroCPU]);
 
-						usleep(retardo * 1000);
+						usleep(retardo * 1000000);
 
+						int j=0;
+						while(leidoSplit[j]!=NULL){
+							free(leidoSplit[j]);
+							j++;
+						}
+						free(leidoSplit);
 						if (quantum != -1) {
 							quantumRafaga--;
 							if (quantumRafaga == 0) {
@@ -547,7 +560,6 @@ void ejecutarmProc() {
 							}
 						}
 
-						free(leidoSplit);
 
 					} while (!feof(mCod) && !entradaSalida); //fin del super while
 
