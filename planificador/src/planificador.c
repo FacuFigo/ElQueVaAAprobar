@@ -62,6 +62,8 @@ t_queue* queueBlocked;
 t_queue* queueCPU;
 t_queue* queueCPULibre;
 
+t_list*  listaCPUs;
+
 pthread_mutex_t mutexQueueReady;
 pthread_mutex_t mutexQueueRunning;
 pthread_mutex_t mutexQueueCPU;
@@ -475,87 +477,27 @@ void logueoEstadosBlock(t_queue* cola){
 }
 
 void comandoCPU(){
-	t_queue* queueAux;
-	cpu_t* cpuMetrica;
-	cpu_t* cpuMetrica2;
+	cpu_t* cpu;
 	char* resultado;
-	int i;
+	int indice;
+	int paqueteMetrica;
 	int tamanioPaquete = sizeof(int);
 	char* paquete = malloc(tamanioPaquete);
-	queueAux = queue_create();
 	serializarInt(paquete, PEDIDOMETRICA);
 
-	pthread_mutex_lock(&mutexQueueCPU);
-	while(!queue_is_empty(queueCPU)){
-		cpuMetrica = queue_pop(queueCPU);
-		send(cpuMetrica->CPUMetrica, paquete, tamanioPaquete, 0);
-		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpuMetrica->CPUMetrica);
-		queue_push(queueAux, cpuMetrica);
-	}
-
-	while(!queue_is_empty(queueAux)){
-		cpuMetrica = queue_pop(queueAux);
-		queue_push(queueCPU, cpuMetrica);
-	}
-	pthread_mutex_unlock(&mutexQueueCPU);
-
-	pthread_mutex_lock(&mutexQueueCPULibre);
-	while(!queue_is_empty(queueCPULibre)){
-		cpuMetrica = queue_pop(queueCPULibre);
-		send(cpuMetrica->CPUMetrica, paquete, tamanioPaquete, 0);
-		log_debug(archivoLogDebug, "la cpu conectada es :%i", cpuMetrica->CPUMetrica);
-		queue_push(queueAux, cpuMetrica);
+	for(indice = 0; indice < cantidadCPUs; indice++){
+		cpu = list_get(listaCPUs, indice);
+		log_debug(archivoLogDebug, "CPU a enviar pedido: %i.", cpu->CPUMetrica);
+		send(cpu->CPUMetrica, paquete, tamanioPaquete, 0);
+		recibirYDeserializarInt(&paqueteMetrica, cpu->CPUMetrica);
+		resultado = string_from_format("CPU %i: %i\%\n", cpu->CPUMetrica, paqueteMetrica);
+		fputs(resultado, stdout);
 	}
 
 	free(paquete);
-
-	while(!queue_is_empty(queueAux)){
-		cpuMetrica = queue_pop(queueAux);
-		queue_push(queueCPULibre, cpuMetrica);
-	}
-	pthread_mutex_unlock(&mutexQueueCPULibre);
-
-	//RECIBO DE LA QUEUE CPU Y LOGUEO
-	pthread_mutex_lock(&mutexQueueCPU);
-	int paqueteMetrica;
-	for(i = 0; i < queue_size(queueCPU); i++){
-
-	cpuMetrica = queue_pop(queueCPU);
-	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica->CPUMetrica);
-
-	resultado = string_from_format("CPU %i: %i\%\n", cpuMetrica->CPUMetrica, paqueteMetrica);
-	fputs(resultado, stdout);
-	queue_push(queueAux, cpuMetrica);
-	}
-
-	while(!queue_is_empty(queueAux)){
-		cpuMetrica = queue_pop(queueAux);
-		queue_push(queueCPU, cpuMetrica);
-	}
-
-	pthread_mutex_unlock(&mutexQueueCPU);
-
-	//RECIBO DE LA QUEUE CPULIBRE Y LOGUEO
-	pthread_mutex_lock(&mutexQueueCPULibre);
-	for(i = 0; i < queue_size(queueCPULibre); i++){
-	int paqueteMetrica;
-	cpuMetrica2 = queue_pop(queueCPULibre);
-	recibirYDeserializarInt(&paqueteMetrica, cpuMetrica2->CPUMetrica);
-	resultado = string_from_format("CPU %i: %i\%\n", cpuMetrica2->CPUMetrica, paqueteMetrica);
-	fputs(resultado, stdout);
-	queue_push(queueAux, cpuMetrica2);
-	}
-
-	while(!queue_is_empty(queueAux)){
-		cpuMetrica2 = queue_pop(queueAux);
-		queue_push(queueCPULibre, cpuMetrica2);
-	}
-
-	pthread_mutex_unlock(&mutexQueueCPULibre);
-	queue_destroy(queueAux);
 }
 
-matarProceso(pcb_t* pcb){
+void matarProceso(pcb_t* pcb){
 	pcb_t* aux;
 	t_queue* queueAux;
 
@@ -843,10 +785,12 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			int* numeroProceso = malloc(sizeof(int));
 			*numeroProceso = pcb->processID;
 
-			log_debug (archivoLogDebug, "El resultado de la rafaga fue :%s.\n", resultadoRafaga);
+			pthread_mutex_lock(&mutexQueueRunning);
+			matarProceso(pcb);
+			pthread_mutex_unlock(&mutexQueueRunning);
 
-			free(pcb);
-						break;
+			log_debug(archivoLogDebug, "el proceso murio intempestivamente!!!!");
+			break;
 		}
 	}
 
@@ -879,6 +823,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 
 void esperarConexiones(){
 
+	listaCPUs = list_create();
 	//Configuracion del Servidor
 	configurarSocketServidor();
 
@@ -917,6 +862,7 @@ void esperarConexiones(){
 		send(cpu->CPUMetrica, paquete, sizeof(int), 0);
 		free(paquete);
 		cpu->numeroCPU = i;
+		list_add(listaCPUs, cpu);
 		log_debug(archivoLogDebug, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
 		log_info(archivoLogObligatorio, "Se conecta el thread numero %i CPU: %i.", cpu->numeroCPU, cpu->cliente);
 
