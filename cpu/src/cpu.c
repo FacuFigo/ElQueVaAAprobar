@@ -332,11 +332,13 @@ void ejecutarmProc() {
 					} while (!string_equals_ignore_case(instruccion,
 							"finalizar;"));
 
+					pthread_mutex_lock(&mutexAccesoMemoria);
 					finalizarmProc(pID);
 
 					int verificador;
 					recibirYDeserializarInt(&verificador, socketMemoria);
 
+					pthread_mutex_unlock(&mutexAccesoMemoria);
 					if (verificador != -1) {
 
 						log_info(archivoLog,
@@ -372,7 +374,7 @@ void ejecutarmProc() {
 					double tiempo_inicio_instruccion = 0;    //TODO
 					double tiempo_fin_instruccion = 0;       //TODO
 					int tiempoInstruccion = 0;
-					tiempo_inicio_instruccion = time(tiempo1);  //TODO
+					//tiempo_inicio_instruccion = time(tiempo1);  //TODO
 
 					do {
 
@@ -393,6 +395,7 @@ void ejecutarmProc() {
 
 							int cantPaginas = valor;
 							pthread_mutex_lock(&mutexAccesoMemoria);
+							tiempo_inicio_instruccion = time(tiempo1);
 							iniciarmProc(pID, cantPaginas);
 							int verificador;
 
@@ -429,6 +432,7 @@ void ejecutarmProc() {
 
 							int nroPagina = valor;
 							pthread_mutex_lock(&mutexAccesoMemoria);
+							tiempo_inicio_instruccion = time(tiempo1);
 							leermProc(pID, nroPagina);
 							int verificador;
 
@@ -480,7 +484,7 @@ void ejecutarmProc() {
 									strlen(leidoSplit[2]) - 4); //Esto corrige el texto
 
 							pthread_mutex_lock(&mutexAccesoMemoria);
-
+							tiempo_inicio_instruccion = time(tiempo1);
 							escribirmProc(pID, nroPagina, textoCorregido);
 
 							free(textoCorregido);
@@ -522,7 +526,7 @@ void ejecutarmProc() {
 
 						if (string_equals_ignore_case(instruccion,
 								"entrada-salida")) {
-
+							tiempo_inicio_instruccion = time(tiempo1);
 							tiempoIO = valor;
 
 							log_info(archivoLog,
@@ -543,7 +547,7 @@ void ejecutarmProc() {
 						if (string_equals_ignore_case(instruccion,
 								"finalizar;")) {
 							pthread_mutex_lock(&mutexAccesoMemoria);
-
+							tiempo_inicio_instruccion = time(tiempo1);
 							finalizarmProc(pID);
 
 							int verificador;
@@ -614,6 +618,7 @@ void ejecutarmProc() {
 
 				fclose(mCod);
 
+				log_info(archivoLog,"La operacion que manda a plani es: %i",operacion);
 				switch (operacion) {
 
 				case ENTRADASALIDA: {
@@ -677,8 +682,6 @@ void ejecutarmProc() {
 
 				operacion = PATHINVALIDO;
 
-				tamanioPaquete = sizeof(int);
-				paqueteRafaga = malloc(tamanioPaquete);
 				serializarInt(paqueteRafaga, operacion);
 				send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 

@@ -323,7 +323,9 @@ void admDeMemoria(){
 
 				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYLeer(pid,pagina,contenido);
-					log_info(archivoLog,"Después de buscar en tlb y leer");
+					accesosTLB++;
+					if (tlbHit)
+						aciertosTLB++;
 				}
 
 				if(!tlbHit)//tlb miss o tlb deshabilitada
@@ -361,8 +363,12 @@ void admDeMemoria(){
 				recibirYDeserializarChar(&contenido,clienteCPU);
 				log_info(archivoLog, "Recibí contenido: %s",contenido);
 
-				if (tlbHabilitada())
+				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYEscribir(pid,pagina,contenido);
+					accesosTLB++;
+					if (tlbHit)
+						aciertosTLB++;
+				}
 				if(!tlbHit)//tlb miss o tlb deshabilitada
 					verificador=escribirMemoria(pid,pagina,contenido);
 
@@ -911,7 +917,6 @@ void limpiarProcesoCM(char* key, t_list *value){
 }
 
 void limpiarPaginaYActualizarSwap (char* key, pagina_t *value){
-	value->nroMarco = -1;
 	if(value->bitPresencia==1){
 			marcos[value->nroMarco]=0;
 	}
@@ -925,6 +930,7 @@ void limpiarPaginaYActualizarSwap (char* key, pagina_t *value){
 		escribirEnSwap(aux,value->pid,value->nroPagina);//TODO verificar si tira error o no
 		free(aux);
 	}
+	value->nroMarco = -1;
 	value->bitModificado = 0;
 }
 
@@ -934,8 +940,6 @@ void calculoTasaTLB(){
 		sleep(60);
 		if (accesosTLB){
 			tasaAcierto=(100*aciertosTLB)/accesosTLB;
-			aciertosTLB=0;
-			accesosTLB=0;
 			log_info(archivoLog,"La tasa de aciertos de la TLB es: %i \% \n",tasaAcierto);
 		}else{
 			log_info(archivoLog,"La tasa de aciertos de la TLB es: NA \n");

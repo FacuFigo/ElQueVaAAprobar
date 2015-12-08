@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
 	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
-	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 0, LOG_LEVEL_DEBUG);
+	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
 
@@ -779,6 +779,12 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		}
 		case FALLOPROCESO:{
 			log_debug(archivoLogDebug, "entre al case FALLOPROCESO");
+
+			char* resultadoRafaga;
+			recibirYDeserializarChar(&resultadoRafaga, cpu->cliente);
+
+			log_info(archivoLog, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
+			log_debug(archivoLogDebug, "El Resultado de la rafaga fue: %s.\n",resultadoRafaga);
 
 			int* numeroProceso = malloc(sizeof(int));
 			*numeroProceso = pcb->processID;
