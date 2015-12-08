@@ -64,6 +64,7 @@ int retardoTotal;
 
 pthread_mutex_t mutexMetricas;
 pthread_mutex_t mutex;
+pthread_mutex_t mutexAccesoMemoria;
 
 int configurarSocketCliente(char* ip, int puerto, int*);
 void configurarCPU(char* config);
@@ -93,6 +94,7 @@ int main(int argc, char** argv) {
 	}
 
 	pthread_mutex_init(&mutex, NULL);
+	pthread_mutex_init(&mutexAccesoMemoria, NULL);
 
 	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
@@ -390,11 +392,13 @@ void ejecutarmProc() {
 						if (string_equals_ignore_case(instruccion, "iniciar")) {
 
 							int cantPaginas = valor;
+							pthread_mutex_lock(&mutexAccesoMemoria);
 							iniciarmProc(pID, cantPaginas);
 							int verificador;
 
 							recibirYDeserializarInt(&verificador,
 									socketMemoria);
+							pthread_mutex_unlock(&mutexAccesoMemoria);
 
 							if (verificador != -1) {
 
@@ -424,6 +428,7 @@ void ejecutarmProc() {
 						if (string_equals_ignore_case(instruccion, "leer")) {
 
 							int nroPagina = valor;
+							pthread_mutex_lock(&mutexAccesoMemoria);
 							leermProc(pID, nroPagina);
 							int verificador;
 
@@ -435,6 +440,7 @@ void ejecutarmProc() {
 								char* resultado;
 								recibirYDeserializarChar(&resultado,
 										socketMemoria);
+								pthread_mutex_unlock(&mutexAccesoMemoria);
 								log_info(archivoLog,
 										"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",
 										nroPagina, pID, resultado);
@@ -447,6 +453,8 @@ void ejecutarmProc() {
 								free(aux);
 
 							} else {
+
+								pthread_mutex_unlock(&mutexAccesoMemoria);
 
 								log_info(archivoLog,
 										"Instruccion ejecutada: leer %d  mProc: %d - Error de lectura",
@@ -471,6 +479,8 @@ void ejecutarmProc() {
 									leidoSplit[2], 1,
 									strlen(leidoSplit[2]) - 4); //Esto corrige el texto
 
+							pthread_mutex_lock(&mutexAccesoMemoria);
+
 							escribirmProc(pID, nroPagina, textoCorregido);
 
 							free(textoCorregido);
@@ -483,6 +493,7 @@ void ejecutarmProc() {
 
 								char* texto;
 								recibirYDeserializarChar(&texto, socketMemoria);
+								pthread_mutex_unlock(&mutexAccesoMemoria);
 								log_info(archivoLog,
 										"Instruccion ejecutada: escribir %d %s mProc: %d Resultado: %s.\n",
 										nroPagina, texto, pID, texto);
@@ -496,6 +507,8 @@ void ejecutarmProc() {
 								free(aux);
 
 							} else {
+
+								pthread_mutex_unlock(&mutexAccesoMemoria);
 
 								log_info(archivoLog,
 										"Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura",
@@ -529,12 +542,14 @@ void ejecutarmProc() {
 
 						if (string_equals_ignore_case(instruccion,
 								"finalizar;")) {
+							pthread_mutex_lock(&mutexAccesoMemoria);
 
 							finalizarmProc(pID);
 
 							int verificador;
 							recibirYDeserializarInt(&verificador,
 									socketMemoria);
+							pthread_mutex_unlock(&mutexAccesoMemoria);
 
 							if (verificador != -1) {
 
@@ -704,8 +719,7 @@ void comandoCPU() {
 			case PEDIDOMETRICA: {
 				pthread_mutex_lock(&mutexMetricas);
 				maxInstXMin = (60 / retardo);
-				porcentaje = (tiempoEjecucion[numeroCPU] * 100)
-						/ maxInstXMin;
+				porcentaje = (tiempoEjecucion[numeroCPU] * 100)/60;
 				log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 				pthread_mutex_unlock(&mutexMetricas);
 

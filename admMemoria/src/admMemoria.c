@@ -314,9 +314,12 @@ void admDeMemoria(){
 				if(contenido == NULL)
 					log_info(archivoLog,"Error en el malloc");
 				//memset(contenido,0,tamanioMarco);
-				log_info(archivoLog,"sizeof de contenido:%i",sizeof(contenido));
+
+				log_info(archivoLog, "Empieza leer memoria.");
 				recibirYDeserializarInt(&pid, clienteCPU);
+				log_info(archivoLog, "Recibí pid: %i",pid);
 				recibirYDeserializarInt(&pagina, clienteCPU);
+				log_info(archivoLog, "Recibí página: %i",pagina);
 
 				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYLeer(pid,pagina,contenido);
@@ -586,10 +589,8 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	}
 
 	memcpy(marcoAEscribir,contenido,strlen(contenido));//tamanioContenido
-
-	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",marcoAEscribir,strlen(marcoAEscribir));
 	memcpy(memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,marcoAEscribir,tamanioMarco);
-	log_info(archivoLog,"Despues del memcpy en memoria principal escrito: %s,%i\n",memoriaPrincipal,strlen(memoriaPrincipal));
+
 	paginaAEscribir->bitModificado=1;
 	paginaAEscribir->bitPresencia=1;
 	paginaAEscribir->bitUso=1;
@@ -623,16 +624,13 @@ int asignarNuevoMarco(){//first fit
 int cantidadMarcosAsignados(t_dictionary *tablaDePaginas){
 	int cantidad=0;
 	int i=0;
-	log_info(archivoLog,"Empieza cantidadMarcosAsignados\n");
 	while(i<dictionary_size(tablaDePaginas) && cantidad<maximoMarcosPorProceso){
 
 		pagina_t *aux = dictionary_get(tablaDePaginas,string_itoa(i));
-		log_info(archivoLog,"Lee pagina %i con bit de presencia: %i\n",i,aux->bitPresencia);
 		if(aux->bitPresencia==1)
 			cantidad++;
 		i++;
 	}
-	log_info(archivoLog,"Termina cantidadMarcosAsignados %i\n",cantidad);
 	return cantidad;
 }
 
