@@ -579,7 +579,7 @@ void ejecutarmProc() {
 						//instruccionesEjecutadas[numeroCPU]++;
 						//log_info(archivoLog, " las instrucciones ejecutadas son: %i", instruccionesEjecutadas[numeroCPU]);
 
-						usleep(retardo * 1000000);
+						usleep(retardo);
 
 						tiempo_fin_instruccion = time(tiempo2);
 
@@ -598,7 +598,7 @@ void ejecutarmProc() {
 						if (quantum != -1) {
 							quantumRafaga--;
 							if (quantumRafaga == 0) {
-								if (operacion != FINALIZARPROCESO)
+								if (operacion != FINALIZARPROCESO && operacion != ENTRADASALIDA)
 									operacion = RAFAGAPROCESO;
 								break;
 							}
@@ -697,7 +697,6 @@ void comandoCPU() {
 	int socketMetricas;
 	int comando;
 	int porcentaje;
-	int maxInstXMin;
 	int continuarMetricas = 1;
 
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
@@ -721,7 +720,9 @@ void comandoCPU() {
 			switch (comando) {
 			case PEDIDOMETRICA: {
 				pthread_mutex_lock(&mutexMetricas);
-				maxInstXMin = (60 / retardo);
+				if(tiempoEjecucion[numeroCPU]>60)
+					tiempoEjecucion[numeroCPU]-=60;
+
 				porcentaje = (tiempoEjecucion[numeroCPU] * 100)/60;
 				log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
 				pthread_mutex_unlock(&mutexMetricas);
