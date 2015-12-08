@@ -268,10 +268,10 @@ void admDeEspacios(){
 
 					if(fragmentacionExt >= proceso->cantidadDePaginas){
 						log_debug(logDebug, "Adentro del if");
-						pthread_t compactador;
-						pthread_create(&compactador, NULL, (void *) compactador, NULL);
+						pthread_t hiloCompactador;
+						pthread_create(&hiloCompactador, NULL, (void *) compactador, NULL);
 
-						pthread_join(compactador, NULL);
+						pthread_join(hiloCompactador, NULL);
 
 						paginaInicio = buscarEspacioDisponible(proceso->cantidadDePaginas);
 
@@ -695,31 +695,41 @@ void compactador(){
 
 	pagina = list_get(listaGestionEspacios, numeroPagina);
 
+	log_debug(logDebug, "Inicia en pagina: %i.", pagina->numeroPagina);
+
 	while(numeroPagina < cantidadPaginas){
 
-		while(pagina->disponibilidad == 0 && numeroPagina < cantidadPaginas){
-			pagina = list_get(listaGestionEspacios, numeroPagina);
+		while(pagina->disponibilidad == 0){
 			numeroPagina++;
+			if(numeroPagina == cantidadPaginas)
+				break;
+			pagina = list_get(listaGestionEspacios, numeroPagina);
 		}
 
 		list_add(espaciosVacios, &pagina->numeroPagina);
-
+		log_debug(logDebug, "Se agrega la pagina %i al espacio vacio.", pagina->numeroPagina);
 		//Leo la proxima pagina
 		numeroPagina++;
 		pagina = list_get(listaGestionEspacios, numeroPagina);
 
 		//Agrego los espacios vacios a la lista
-		while(pagina->disponibilidad == 1 && numeroPagina < cantidadPaginas){
+		while(pagina->disponibilidad == 1){
 			list_add(espaciosVacios, &pagina->numeroPagina);
+			log_debug(logDebug, "Se agrega la pagina %i al espacio vacio.", pagina->numeroPagina);
 			numeroPagina++;
+			if(numeroPagina == cantidadPaginas)
+				break;
 			pagina = list_get(listaGestionEspacios, numeroPagina);
+			log_debug(logDebug, "Pagina %i, proceso: %i, disponibilidad %i", pagina->numeroPagina, pagina->proceso, pagina->disponibilidad);
 		}
 
 		//Lista de espacios creada con solo los numeros de pagina
 		//Se acabo un espacio en blanco
-		//Mientras no encuentre un espacio en blanco, sigue buscando
-		while(pagina->disponibilidad == 0 && numeroPagina < cantidadPaginas){
+		//Mientras no encuentre un espacio en blanco, sigue moviendo las paginas
+		while(pagina->disponibilidad == 0){
 			paginaBlanco = list_get(espaciosVacios, numeroPaginaBlanco);
+			log_debug(logDebug, "Pagina en blanco %i", *paginaBlanco);
+
 			char* contenidoAMover = malloc(sizeof(tamanioPagina));
 
 			//Leo la pagina del proceso
@@ -738,11 +748,15 @@ void compactador(){
 			paginaNueva->disponibilidad = 0;
 			paginaNueva->proceso = pagina->proceso;
 
+			log_debug(logDebug, "Proceso: %i, Pagina vieja: %i, Pagina nueva: %i", pagina->proceso, pagina->numeroPagina, paginaNueva->numeroPagina);
+
 			pagina->disponibilidad = 1;
 			pagina->proceso = -1;
 
 			//Al ser ahora un espacio en blanco, se addea a la lista de espacios en blanco
 			list_add(espaciosVacios, &pagina->numeroPagina);
+
+			log_debug(logDebug, "Se añande la pagina %i a espacios vacios.", pagina->numeroPagina);
 
 			numeroPagina++;
 			numeroPaginaBlanco++;
