@@ -58,8 +58,6 @@ int listeningSocket;
 int clienteCPUPadre;
 int pIDContador = 1;
 int cantidadCPUs;
-double tiempoInicioEjecucion = 0;
-double tiempoFinEjecucion = 0;
 
 t_queue* queueReady;
 t_queue* queueRunning;
@@ -77,6 +75,7 @@ pthread_mutex_t mutexQueueBlocked;
 pthread_mutex_t mutexPlanificador;
 pthread_mutex_t mutexEntradaSalida;
 pthread_mutex_t mutexCola;
+pthread_mutex_t mutexTiempos;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
@@ -94,10 +93,18 @@ typedef struct {
 	int programCounter;
 	char* path;
 	int flagFinalizar;
-	time_t* tiempoEjecucion;
+	time_t* tiempoEjecucionInicio;
 	time_t* tiempoEjecucionFin;
-	time_t* tiempoEspera;
+	time_t* tiempoEsperaInicio;
+	time_t* tiempoEsperaFin;
 	time_t* tiempoRespuesta;
+	time_t* tiempoResupuestaFin;
+	double tiempoInicioEjecucion;
+	double tiempoFinEjecucion;
+	double tiempoInicioEspera;
+	double tiempoFinEspera;
+	double tiempoEjecucion;
+	double tiempoEspera;
 } pcb_t;
 
 typedef struct{
@@ -148,7 +155,7 @@ int main(int argc, char** argv) {
 	system("rm log_Planificador_Obligatorio");
 
 	//Creo el archivo de logs
-	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 1, LOG_LEVEL_TRACE);
+	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
 	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
@@ -169,6 +176,7 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexQueueBlocked, NULL);
 	pthread_mutex_init(&mutexPlanificador, NULL);
 	pthread_mutex_init(&mutexEntradaSalida, NULL);
+	pthread_mutex_init(&mutexCola, NULL);
 	pthread_mutex_init(&mutexCola, NULL);
 
 	esperarConexiones();
@@ -289,10 +297,12 @@ void manejoDeConsola() {
 void correrProceso(char* path) {
 
 	pcb_t* pcb = malloc(sizeof(pcb_t));
+	pcb->tiempoEsperaInicio = malloc(sizeof(time_t));
 	generarPCB(pcb);
 	pcb->path = string_duplicate(path);
 
 	//Agrego a la cola READY
+	pcb->tiempoInicioEspera += time(pcb->tiempoEsperaInicio);
 	pthread_mutex_lock(&mutexQueueReady);
 	queue_push(queueReady, pcb);
 	pthread_mutex_unlock(&mutexQueueReady);
@@ -309,6 +319,13 @@ void generarPCB(pcb_t* pcb){
 	pcb->programCounter = 0;
 	//El estado se asigna a Ready
 	pcb->estadoProceso = 0;
+
+	pcb->tiempoEjecucion = 0;
+	pcb->tiempoInicioEjecucion = 0;
+	pcb->tiempoFinEjecucion = 0;
+	pcb->tiempoInicioEspera = 0;
+	pcb->tiempoFinEspera = 0;
+	pcb->tiempoEspera = 0;
 
 	pIDContador++;
 
@@ -527,8 +544,8 @@ void planificador() {
 			//Cambia el estado del proceso
 			pcb->estadoProceso = RUNNING;
 
-			pcb->tiempoEjecucion = malloc(sizeof(time_t));
-			tiempoInicioEjecucion += time(pcb->tiempoEjecucion);
+			pcb->tiempoEjecucionInicio = malloc(sizeof(time_t));
+			pcb->tiempoInicioEjecucion += time(pcb->tiempoEjecucionInicio);
 
 			pthread_mutex_lock(&mutexQueueCPU);
 			queue_push(queueCPU, cpu);
@@ -583,6 +600,7 @@ void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked){
 				break;
 			}else{
 				log_debug(archivoLogDebug, "El proceso %i va a la cola Ready.", pcb->processID);
+				pcb->tiempoInicioEspera += time(pcb->tiempoEsperaInicio);
 				queue_push(queueReady, pcb);
 			}
 
@@ -633,6 +651,7 @@ void entradaSalida(){
 			while(!queue_is_empty(queueBlocked)){
 				proceso = queue_pop(queueBlocked);
 				if(proceso->pcb->processID == pcbAux->processID){
+					proceso->pcb->tiempoInicioEspera += time(proceso->pcb->tiempoEsperaInicio);
 					pthread_mutex_lock(&mutexQueueReady);
 					queue_push(queueReady, proceso->pcb);
 					pthread_mutex_unlock(&mutexQueueReady);
@@ -682,7 +701,9 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	log_debug(archivoLogDebug,"forma de finalizacion:%d", formaFinalizacion);
 
 	pcb->tiempoEjecucionFin = malloc(sizeof(time_t));
-	tiempoFinEjecucion += time(pcb->tiempoEjecucionFin);
+	pcb->tiempoEsperaFin = malloc(sizeof(time_t));
+	pcb->tiempoFinEjecucion += time(pcb->tiempoEjecucionFin);
+	pcb->tiempoFinEspera += time(pcb->tiempoEsperaFin);
 
 
 	switch(formaFinalizacion){
@@ -752,10 +773,24 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			int* numeroProceso = malloc(sizeof(int));
 			*numeroProceso = pcb->processID;
 
+			pthread_mutex_lock(&mutexTiempos);
 			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s.\n ", *numeroProceso, pcb->path);
-			double tiempoEjecucion = tiempoFinEjecucion - tiempoInicioEjecucion;
-			log_info(archivoLogObligatorio, "EL tiempo de ejecución fue: %g.", tiempoEjecucion);
+			pcb->tiempoEjecucion = pcb->tiempoFinEjecucion - pcb->tiempoInicioEjecucion;
+			pcb->tiempoEspera = pcb->tiempoFinEspera - pcb->tiempoInicioEspera;
+			log_info(archivoLogObligatorio, "EL tiempo de ejecución fue: %g.", pcb->tiempoEjecucion);
+			log_info(archivoLogObligatorio, "EL tiempo de espera fue: %g.", pcb->tiempoEspera);
+			pcb->tiempoInicioEjecucion = 0;
+			pcb->tiempoFinEjecucion = 0;
+			pcb->tiempoInicioEspera = 0;
+			pcb->tiempoFinEspera = 0;
+			pcb->tiempoEjecucion = 0;
+			pcb->tiempoEspera = 0;
+			pcb->tiempoEjecucionInicio = 0;
+			pcb->tiempoEjecucionFin = 0;
+			pcb->tiempoEsperaInicio = 0;
+			pcb->tiempoEsperaFin = 0;
 			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
+			pthread_mutex_unlock(&mutexTiempos);
 
 			pthread_mutex_lock(&mutexQueueRunning);
 			matarProceso(pcb);
