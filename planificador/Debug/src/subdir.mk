@@ -3,9 +3,6 @@
 ################################################################################
 
 # Add inputs and outputs from these tool invocations to the build variables 
-O_SRCS += \
-../src/planificador.o 
-
 C_SRCS += \
 ../src/planificador.c 
 

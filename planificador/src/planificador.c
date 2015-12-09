@@ -56,6 +56,10 @@ char* algoritmo;
 int quantum;
 int listeningSocket;
 int clienteCPUPadre;
+int pIDContador = 1;
+int cantidadCPUs;
+double tiempoInicioEjecucion = 0;
+double tiempoFinEjecucion = 0;
 
 t_queue* queueReady;
 t_queue* queueRunning;
@@ -74,9 +78,6 @@ pthread_mutex_t mutexPlanificador;
 pthread_mutex_t mutexEntradaSalida;
 pthread_mutex_t mutexCola;
 
-int pIDContador = 1;
-int cantidadCPUs;
-
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
 
@@ -93,6 +94,10 @@ typedef struct {
 	int programCounter;
 	char* path;
 	int flagFinalizar;
+	time_t* tiempoEjecucion;
+	time_t* tiempoEjecucionFin;
+	time_t* tiempoEspera;
+	time_t* tiempoRespuesta;
 } pcb_t;
 
 typedef struct{
@@ -143,7 +148,7 @@ int main(int argc, char** argv) {
 	system("rm log_Planificador_Obligatorio");
 
 	//Creo el archivo de logs
-	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 0, LOG_LEVEL_TRACE);
+	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 1, LOG_LEVEL_TRACE);
 	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
 	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
 
@@ -341,29 +346,6 @@ int buscarYEliminarEnCola(t_queue* cola, int pid){
 			encontrado++;
 			log_debug(archivoLogDebug, "i found it bro");
 
-			/*int tamanioPaquete = sizeof(int) * 2;
-			char* paquete = malloc(tamanioPaquete);
-			serializarInt(serializarInt(paquete, FINALIZARPROCESO), pid);
-
-			send(clienteCPUPadre, paquete, tamanioPaquete, 0);
-			log_debug(archivoLogDebug, "mande finalizar a cpu");
-
-			free(paquete);
-
-			int* notificacion = malloc(sizeof(int));
-			recibirYDeserializarInt(notificacion, clienteCPUPadre);
-			log_debug(archivoLogDebug, "recibi notificacion: %i", *notificacion);
-
-			if(*notificacion != -1){
-				log_info(archivoLog, "Se elimina el proceso:%i", pcb->processID);
-				free(pcb);
-				break;
-			}else{
-				log_error(archivoLog, "No se pudo eliminar el proceso %i.\n", pid);
-			}
-
-			free(notificacion);
-			free(paquete);*/
 			queue_push(queueAuxiliar, pcb);
 
 		}else{
@@ -525,8 +507,8 @@ void matarProceso(pcb_t* pcb){
 void planificador() {
 	log_debug(archivoLog, "Empieza el thread planificador.\n");
 
-	cpu_t* cpu;// = malloc(sizeof(cpu_t));
-	pcb_t* pcb;// = malloc(sizeof(pcb_t));
+	cpu_t* cpu;
+	pcb_t* pcb;
 
 	while(1){
 		pthread_mutex_lock(&mutexPlanificador);
@@ -544,6 +526,9 @@ void planificador() {
 
 			//Cambia el estado del proceso
 			pcb->estadoProceso = RUNNING;
+
+			pcb->tiempoEjecucion = malloc(sizeof(time_t));
+			tiempoInicioEjecucion += time(pcb->tiempoEjecucion);
 
 			pthread_mutex_lock(&mutexQueueCPU);
 			queue_push(queueCPU, cpu);
@@ -601,10 +586,6 @@ void finalizarRafaga(pcb_t* pcb, int* tiempoBlocked){
 				queue_push(queueReady, pcb);
 			}
 
-			//Si la colaDestino es NULL significa que termina el proceso y lo saca de todas las queue
-			/*if(colaDestino != NULL)
-				queue_push(colaDestino, pcb);
-*/
 			break;
 		} else {
 			queue_push(queueAux, aux);
@@ -700,6 +681,9 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 	recibirYDeserializarInt(&formaFinalizacion, cpu->cliente);
 	log_debug(archivoLogDebug,"forma de finalizacion:%d", formaFinalizacion);
 
+	pcb->tiempoEjecucionFin = malloc(sizeof(time_t));
+	tiempoFinEjecucion += time(pcb->tiempoEjecucionFin);
+
 
 	switch(formaFinalizacion){
 
@@ -769,6 +753,8 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			*numeroProceso = pcb->processID;
 
 			log_info(archivoLogObligatorio, "Finaliza el proceso %i: %s.\n ", *numeroProceso, pcb->path);
+			double tiempoEjecucion = tiempoFinEjecucion - tiempoInicioEjecucion;
+			log_info(archivoLogObligatorio, "EL tiempo de ejecución fue: %g.", tiempoEjecucion);
 			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 
 			pthread_mutex_lock(&mutexQueueRunning);
