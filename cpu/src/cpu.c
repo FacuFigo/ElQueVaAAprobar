@@ -45,6 +45,7 @@ typedef enum {
 } operacion_t;
 
 t_log* archivoLog;
+t_log* logObligatorio;
 char* ipPlanificador;
 char* ipMemoria;
 int puertoPlanificador;
@@ -58,7 +59,6 @@ int threadCounter;
 int quantum;          //si es -1, toy en fifo
 int tamanioMarco;
 int* tiempoEjecucion;
-//int* instruccionesEjecutadas;
 int planiVive = 1;
 int retardoTotal;
 
@@ -79,18 +79,19 @@ void timer_handler(int signum);
 int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
-	archivoLog = log_create("log_CPU", "CPU", 1, 0);
-	log_info(archivoLog, "Archivo de logs creado.\n");
+	logObligatorio = log_create("log_cpu_Obligatorio", "cpu", 1,
+			LOG_LEVEL_TRACE);
+
+	archivoLog = log_create("log_CPU", "CPU", 0, 0);
+	//log_info(archivoLog, "Archivo de logs creado.\n");
 
 	configurarCPU(argv[1]);
 
 	tiempoEjecucion = malloc(sizeof(int) * cantidadHilos);
-	//instruccionesEjecutadas = malloc(sizeof(int) * cantidadHilos);
 
 	int f;
 	for (f = 0; f < cantidadHilos; f++) {   //inicializa en 0
 		tiempoEjecucion[f] = 0;
-		//instruccionesEjecutadas[f] = 0;
 	}
 
 	pthread_mutex_init(&mutex, NULL);
@@ -99,20 +100,21 @@ int main(int argc, char** argv) {
 	//conexion con el planificador
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 			&socketPlanificador))
-		log_info(archivoLog, "Conectado al Planificador %i.\n",
+		log_info(logObligatorio, "Conectado al Planificador %i.\n",
 				socketPlanificador);
 	else
-		log_error(archivoLog, "Error al conectar con Planificador. %s\n",
+		log_error(logObligatorio, "Error al conectar con Planificador. %s\n",
 				ipPlanificador);
 
 	//conexion con memoria
 	if (configurarSocketCliente(ipMemoria, puertoMemoria, &socketMemoria))
-		log_info(archivoLog, "Conectado a la Memoria %i.\n", socketMemoria);
+		log_info(logObligatorio, "Conectado a la Memoria %i.\n", socketMemoria);
 	else
-		log_error(archivoLog, "Error al conectar con Memoria. %s\n", ipMemoria);
+		log_error(logObligatorio, "Error al conectar con Memoria. %s\n",
+				ipMemoria);
 
 	recibirYDeserializarInt(&quantum, socketPlanificador);
-	log_info(archivoLog, "Recibi quantum %d.", quantum);
+	log_info(logObligatorio, "Recibi quantum %d.", quantum);
 
 	char* paquetecpu = malloc(sizeof(int));
 	serializarInt(paquetecpu, cantidadHilos);
@@ -126,7 +128,7 @@ int main(int argc, char** argv) {
 	//creacion de hilos CPU
 	for (threadCounter = 0; threadCounter < cantidadHilos; threadCounter++) {
 		pthread_create(&hilos, NULL, (void *) ejecutarmProc, NULL);
-		log_info(archivoLog, "Instancia de CPU %i creada id: %i.\n",
+		log_info(logObligatorio, "Instancia de CPU %i creada id: %i.\n",
 				threadCounter, process_get_thread_id());
 	}
 
@@ -197,11 +199,11 @@ void iniciarmProc(int pID, int cantPaginas) {
 	int tamPaquete = sizeof(int) * 3;
 	char* paquete = malloc(tamPaquete);
 
-	//log_info(archivoLog, "Cantidad de paginas: %i.\n", cantPaginas);
+	log_info(archivoLog, "Cantidad de paginas: %i.\n", cantPaginas);
 	serializarInt(serializarInt(serializarInt(paquete, INICIOMEMORIA), pID),
 			cantPaginas);
 	send(socketMemoria, paquete, tamPaquete, 0);
-	//log_info(archivoLog, "mande el paquete\n"); (saque el log que muestra el paquete)
+	log_info(archivoLog, "mande el paquete\n");
 
 	free(paquete);
 
@@ -363,14 +365,13 @@ void ejecutarmProc() {
 
 				case INICIARPROCESO: {
 
-
 					int i;
 					for (i = 0; programCounter > i; i++) {
 						fgets(comandoLeido, tamanioComando, mCod); //este primer fgets sirve para pararte en el programCounter cuando vuelve de quantum o e/s
 					}
 
-					time_t *tiempo1=malloc(sizeof(time_t));  //TODO
-					time_t *tiempo2=malloc(sizeof(time_t));  //TODO
+					time_t *tiempo1 = malloc(sizeof(time_t));  //TODO
+					time_t *tiempo2 = malloc(sizeof(time_t));  //TODO
 					double tiempo_inicio_instruccion = 0;    //TODO
 					double tiempo_fin_instruccion = 0;       //TODO
 					int tiempoInstruccion = 0;
@@ -576,18 +577,23 @@ void ejecutarmProc() {
 							operacion = FINALIZARPROCESO; //Podria meter un break aca en vez del if en quantum ?
 						}
 
-						//instruccionesEjecutadas[numeroCPU]++;
 						//log_info(archivoLog, " las instrucciones ejecutadas son: %i", instruccionesEjecutadas[numeroCPU]);
 
 						usleep(retardo);
 
 						tiempo_fin_instruccion = time(tiempo2);
 
-						tiempoInstruccion = tiempo_fin_instruccion - tiempo_inicio_instruccion;
-						tiempoEjecucion[numeroCPU] = tiempoEjecucion[numeroCPU] + tiempoInstruccion;
+						tiempoInstruccion = tiempo_fin_instruccion
+								- tiempo_inicio_instruccion;
+						tiempoEjecucion[numeroCPU] = tiempoEjecucion[numeroCPU]
+								+ tiempoInstruccion;
 
-						log_info(archivoLog, "el tiempo de la instruccion fue: %i",tiempoInstruccion);
-						log_info(archivoLog, "mCod lleva %i segundos ejecutando", tiempoEjecucion[numeroCPU]);
+						log_info(archivoLog,
+								"el tiempo de la instruccion fue: %i",
+								tiempoInstruccion);
+						log_info(archivoLog,
+								"mCod lleva %i segundos ejecutando",
+								tiempoEjecucion[numeroCPU]);
 
 						int j = 0;
 						while (leidoSplit[j] != NULL) {
@@ -618,7 +624,8 @@ void ejecutarmProc() {
 
 				fclose(mCod);
 
-				log_info(archivoLog,"La operacion que manda a plani es: %i",operacion);
+				log_info(archivoLog, "La operacion que manda a plani es: %i",
+						operacion);
 				switch (operacion) {
 
 				case ENTRADASALIDA: {
@@ -682,6 +689,7 @@ void ejecutarmProc() {
 
 				operacion = PATHINVALIDO;
 
+				paqueteRafaga = malloc(tamanioPaquete);
 				serializarInt(paqueteRafaga, operacion);
 				send(socketPlaniHilo, paqueteRafaga, tamanioPaquete, 0);
 
@@ -716,15 +724,17 @@ void comandoCPU() {
 		continuarMetricas = recibirYDeserializarInt(&comando, socketMetricas);
 
 		if (continuarMetricas) {
-			log_info(archivoLog, "Recibí operación: %i", comando);
+			//log_info(archivoLog, "Recibí operación: %i", comando);
 			switch (comando) {
 			case PEDIDOMETRICA: {
 				pthread_mutex_lock(&mutexMetricas);
+
 				if(tiempoEjecucion[numeroCPU]>60)
 					tiempoEjecucion[numeroCPU]-=60;
 
 				porcentaje = (tiempoEjecucion[numeroCPU] * 100)/60;
 				log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
+
 				pthread_mutex_unlock(&mutexMetricas);
 
 				int tamanioPorcentaje = sizeof(int);
@@ -746,7 +756,6 @@ void timer_handler(int signum) {
 //pensar en mutex
 	for (i = 0; i < cantidadHilos; i++) {
 		tiempoEjecucion[i] = 0;
-		//instruccionesEjecutadas[i] = 0;
 	}
 
 }
