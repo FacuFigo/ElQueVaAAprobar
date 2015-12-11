@@ -76,6 +76,7 @@ pthread_mutex_t mutexPlanificador;
 pthread_mutex_t mutexEntradaSalida;
 pthread_mutex_t mutexCola;
 pthread_mutex_t mutexTiempos;
+pthread_mutex_t mutexPidContador;
 
 //Estructuras
 typedef enum {READY, RUNNING, BLOCKED} estados_t;
@@ -159,7 +160,7 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	archivoLogObligatorio = log_create("log_Planificador_Obligatorio", "Planificador", 1, LOG_LEVEL_TRACE);
 	archivoLog = log_create("log_Planificador", "planificador", 0, LOG_LEVEL_TRACE);
-	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 1, LOG_LEVEL_DEBUG);
+	archivoLogDebug = log_create("log_Debug", "PLANIFICADOR", 0, LOG_LEVEL_DEBUG);
 
 	configurarPlanificador(argv[1]);
 
@@ -179,7 +180,8 @@ int main(int argc, char** argv) {
 	pthread_mutex_init(&mutexPlanificador, NULL);
 	pthread_mutex_init(&mutexEntradaSalida, NULL);
 	pthread_mutex_init(&mutexCola, NULL);
-	pthread_mutex_init(&mutexCola, NULL);
+	pthread_mutex_init(&mutexTiempos, NULL);
+	pthread_mutex_init(&mutexPidContador, NULL);
 
 	esperarConexiones();
 
@@ -512,7 +514,6 @@ void matarProceso(pcb_t* pcb){
 
 		aux = queue_pop(queueRunning);
 		if(pcb->processID == aux->processID)
-//TODO
 			free(pcb);
 		else
 			queue_push(queueAux, aux);
@@ -793,21 +794,6 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 			log_info(archivoLogObligatorio, "EL tiempo de ejecución fue: %g.", pcb->tiempoEjecucion);
 			log_info(archivoLogObligatorio, "EL tiempo de espera fue: %g.", pcb->tiempoEspera);
 			log_info(archivoLogObligatorio, "EL tiempo de respuesta fue: %g.", pcb->tiempoRespuesta);
-			pcb->tiempoInicioEjecucion = 0;
-			pcb->tiempoFinEjecucion = 0;
-			pcb->tiempoInicioEspera = 0;
-			pcb->tiempoFinEspera = 0;
-			pcb->tiempoInicioRespuesta = 0;
-			pcb->tiempoFinRespuesta = 0;
-			pcb->tiempoEjecucion = 0;
-			pcb->tiempoEspera = 0;
-			pcb->tiempoFinRespuesta = 0;
-			pcb->tiempoEjecucionInicio = 0;
-			pcb->tiempoEjecucionFin = 0;
-			pcb->tiempoEsperaInicio = 0;
-			pcb->tiempoEsperaFin = 0;
-			pcb->tiempoRespuestaInicio = 0;
-			pcb->tiempoRespuestaFin = 0;
 
 			log_debug(archivoLogDebug, "Finaliza el proceso %i.", pcb->processID);
 			pthread_mutex_unlock(&mutexTiempos);
@@ -839,7 +825,10 @@ void procesoCorriendo(procesoCorriendo_t* proceso){
 		}
 		case PATHINVALIDO: {
 			log_debug(archivoLogDebug, "entre al case PATHINVALIDO");
-
+			fputs("El path es inválido.", stdout);
+			pthread_mutex_lock(&mutexPidContador);
+			pIDContador--;
+			pthread_mutex_unlock(&mutexPidContador);
 			pthread_mutex_lock(&mutexQueueRunning);
 			matarProceso(pcb);
 			pthread_mutex_unlock(&mutexQueueRunning);
