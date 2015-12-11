@@ -275,10 +275,10 @@ void ejecutarmProc() {
 
 	if (configurarSocketCliente(ipPlanificador, puertoPlanificador,
 			&socketPlaniHilo))
-		log_info(archivoLog, "Conectado al Planificador %i.\n",
+		log_info(logObligatorio, "Conectado al Planificador %i.\n",
 				socketPlaniHilo);
 	else
-		log_error(archivoLog, "Error al conectar con Planificador. %s\n",
+		log_error(logObligatorio, "Error al conectar con Planificador. %s\n",
 				ipPlanificador);
 
 	int numeroCPU;
@@ -300,17 +300,17 @@ void ejecutarmProc() {
 
 		if (continuar) { //inicio del if continuar, valida que plani mande bien la operacion ?
 
-			log_info(archivoLog, "Recibi operacion %i.\n", operacion);
+			log_info(logObligatorio, "Recibi operacion %i.\n", operacion);
 
 			recibirYDeserializarInt(&pID, socketPlaniHilo);
-			log_info(archivoLog, "Recibi pid %i.\n", pID);
+			log_info(logObligatorio, "Recibi pid %i.\n", pID);
 
 			recibirYDeserializarInt(&programCounter, socketPlaniHilo);
-			log_info(archivoLog, "Recibi program counter %i.\n",
+			log_info(logObligatorio, "Recibi program counter %i.\n",
 					programCounter);
 
 			recibirYDeserializarChar(&path, socketPlaniHilo);
-			log_info(archivoLog, "Recibi path %s.\n", path);
+			log_info(logObligatorio, "Recibi path %s.\n", path);
 
 			char* ruta = string_from_format(
 					"/home/utnso/tp-2015-2c-elquevaaaprobar/scripts/%s", path);
@@ -343,7 +343,7 @@ void ejecutarmProc() {
 					pthread_mutex_unlock(&mutexAccesoMemoria);
 					if (verificador != -1) {
 
-						log_info(archivoLog,
+						log_info(logObligatorio,
 								"Instruccion ejecutada:finalizar mProc:%d finalizado",
 								pID);
 						char* aux = string_from_format("mProc %d finalizado.\n",
@@ -353,7 +353,7 @@ void ejecutarmProc() {
 
 					} else {
 
-						log_info(archivoLog,
+						log_info(logObligatorio,
 								"Instruccion ejecutada:finalizar mProc:%d - Error al finalizar",
 								pID);
 
@@ -406,7 +406,7 @@ void ejecutarmProc() {
 
 							if (verificador != -1) {
 
-								log_info(archivoLog,
+								log_info(logObligatorio,
 										"Instruccion ejecutada:iniciar %d mProc:%d iniciado.",
 										cantPaginas, pID);
 								char* aux = string_from_format(
@@ -416,7 +416,7 @@ void ejecutarmProc() {
 
 							} else {
 
-								log_info(archivoLog,
+								log_info(logObligatorio,
 										"Instruccion ejecutada:iniciar %d mProc:%d. FALLO!",
 										cantPaginas, pID);
 								char* aux = string_from_format(
@@ -446,9 +446,9 @@ void ejecutarmProc() {
 								recibirYDeserializarChar(&resultado,
 										socketMemoria);
 								pthread_mutex_unlock(&mutexAccesoMemoria);
-								log_info(archivoLog,
-										"Instruccion ejecutada:leer %d Proceso:%d. Resultado:%s",
-										nroPagina, pID, resultado);
+								log_info(logObligatorio,
+										"Instruccion ejecutada:leer %d mProc:%d - Pagina %d leida: %s.",
+										nroPagina, pID, nroPagina, resultado);
 								char* aux = string_from_format(
 										"mProc %d - Pagina %d leida: %s.\n",
 										pID, nroPagina, resultado);
@@ -461,7 +461,7 @@ void ejecutarmProc() {
 
 								pthread_mutex_unlock(&mutexAccesoMemoria);
 
-								log_info(archivoLog,
+								log_info(logObligatorio,
 										"Instruccion ejecutada: leer %d  mProc: %d - Error de lectura",
 										nroPagina, pID);
 								char* aux =
@@ -499,9 +499,9 @@ void ejecutarmProc() {
 								char* texto;
 								recibirYDeserializarChar(&texto, socketMemoria);
 								pthread_mutex_unlock(&mutexAccesoMemoria);
-								log_info(archivoLog,
-										"Instruccion ejecutada: escribir %d %s mProc: %d Resultado: %s.\n",
-										nroPagina, texto, pID, texto);
+								log_info(logObligatorio,
+										"Instruccion ejecutada: escribir %d %s mProc: %d - Pagina %d escrita:%s.\n",
+										nroPagina, texto, pID, nroPagina, texto);
 								char* aux = string_from_format(
 										"mProc %d - Pagina %d escrita:%s.\n",
 										pID, nroPagina, texto);
@@ -515,8 +515,8 @@ void ejecutarmProc() {
 
 								pthread_mutex_unlock(&mutexAccesoMemoria);
 
-								log_info(archivoLog,
-										"Instruccion ejecutada: escribir %d %s Proceso: %d - Error de escritura",
+								log_info(logObligatorio,
+										"Instruccion ejecutada: escribir %d %s mProc: %d - Error de escritura",
 										nroPagina, leidoSplit[2], pID); //TODO CAMBIAR ESTO
 
 								operacion = FALLOPROCESO; //EN CASO DE QUE QUIERA ESCRIBIR ALGO QUE NO SE PUEDE
@@ -530,9 +530,9 @@ void ejecutarmProc() {
 							tiempo_inicio_instruccion = time(tiempo1);
 							tiempoIO = valor;
 
-							log_info(archivoLog,
-									"Instruccion ejecutada: entrada-salida %d mProc: %d ",
-									tiempoIO, pID);
+							log_info(logObligatorio,
+									"Instruccion ejecutada: entrada-salida %d mProc: %d en entrada-salida de tiempo %d ",
+									tiempoIO, pID, tiempoIO);
 							char* aux =
 									string_from_format(
 											"mProc %d en entrada-salida de tiempo %d.\n",
@@ -558,7 +558,7 @@ void ejecutarmProc() {
 
 							if (verificador != -1) {
 
-								log_info(archivoLog,
+								log_info(logObligatorio,
 										"Instruccion ejecutada:finalizar mProc:%d finalizado",
 										pID);
 								char* aux = string_from_format(
@@ -568,7 +568,7 @@ void ejecutarmProc() {
 
 							} else {
 
-								log_info(archivoLog,
+								log_info(logObligatorio,
 										"Instruccion ejecutada:finalizar mProc:%d - Error al finalizar",
 										pID);
 
@@ -619,7 +619,7 @@ void ejecutarmProc() {
 				}
 				}
 
-				log_info(archivoLog, "Ejecucion de rafaga concluida. mProc:%d",
+				log_info(logObligatorio, "Ejecucion de rafaga concluida. mProc:%d",
 						pID);
 
 				fclose(mCod);
@@ -733,7 +733,7 @@ void comandoCPU() {
 					tiempoEjecucion[numeroCPU]-=60;
 
 				porcentaje = (tiempoEjecucion[numeroCPU] * 100)/60;
-				log_info(archivoLog, "EL PORCENTAJE ES: %i", porcentaje);
+				log_info(logObligatorio, "El porcentaje de uso es: %i", porcentaje);
 
 				pthread_mutex_unlock(&mutexMetricas);
 
