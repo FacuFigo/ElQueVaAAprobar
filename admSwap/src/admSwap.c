@@ -768,6 +768,8 @@ void compactador(){
 
 	list_destroy(espaciosVacios);
 
+	sleep(retardoCompactacion);
+
 	log_info(archivoLog, "Finaliza compactación.");
 }
 
