@@ -36,6 +36,7 @@
 
 t_log* archivoLog;
 t_log* archivoLogPrueba;
+t_log* archivoLogObligatorio;
 
 typedef enum {
 	INICIARPROCESO = 0,
@@ -71,6 +72,11 @@ typedef struct {
 	int marco;
 } entradaTLB_t;
 
+typedef struct {
+	int accesosAPaginas;
+	int fallosDePaginas;
+} accesos_t;
+
 int puertoEscucha;
 char* ipSwap;
 int puertoSwap;
@@ -90,6 +96,7 @@ int accesosTLB=0;
 algoritmo_t algoritmoDeReemplazo = FIFO;
 t_dictionary *tablaDeProcesos;
 t_dictionary *tablaDeProcesosCM;
+t_dictionary *tablaDeProcesosAccesos;
 t_list *tlb;
 pthread_mutex_t mutexAccesoTLB;
 pthread_mutex_t mutexAccesoMemoria;
@@ -134,8 +141,9 @@ int main(int argc, char** argv) {
 	//Creo el archivo de logs
 	system("rm log_prueba");
 
-	archivoLog = log_create("log_AdmMemoria", "AdmMemoria", 1, 0);
+	archivoLog = log_create("log_AdmMemoria", "AdmMemoria", 0, 0);
 	archivoLogPrueba = log_create("log_prueba", "AdmMemoria",0,0);
+	archivoLogObligatorio = log_create("log_AdmMemoria_Obligatorio", "AdmMemoria",0,0);
 	log_info(archivoLog, "Archivo de logs creado.\n");
 
 	configurarAdmMemoria(argv[1]);
@@ -262,6 +270,7 @@ void admDeMemoria(){
 	int i,continuar=1;
 	memoriaPrincipal = calloc (cantidadMarcos,tamanioMarco);
 	tablaDeProcesos = dictionary_create();
+	tablaDeProcesosAccesos = dictionary_create();
 	if (algoritmoDeReemplazo==CLOCKMEJORADO)
 		tablaDeProcesosCM=dictionary_create();
 	if (tlbHabilitada())
@@ -289,19 +298,22 @@ void admDeMemoria(){
 				tamanioPaquete = sizeof(int) * 3;
 				paquete = malloc(tamanioPaquete);
 				serializarInt(serializarInt(serializarInt(paquete, INICIARPROCESO), pid), cantPaginas);
-				log_info(archivoLog, "Antes del send de paquete.\n");
+
 				send(socketSwap, paquete, tamanioPaquete, 0);
-				log_info(archivoLog, "Despues del send de paquete.\n");
 				free(paquete);//Se puede sacar este free?
 
 				//Recibo respuesta de Swap:
 				recibirYDeserializarInt(&verificador, socketSwap);
 				pthread_mutex_unlock(&mutexAccesoMemoria);
 
-				if (verificador != -1)
+				if (verificador != -1){
+					log_info(archivoLogObligatorio,"Proceso mProc creado, pid: %i con %i paginas asignadas.",pid,cantPaginas);
 					log_info(archivoLog, "Memoria inicializada");
-				else
+				}
+				else{
+					log_info(archivoLogObligatorio,"Fallo al iniciar proceso mProc, pid %i .",pid);
 					log_info(archivoLog,"Fallo al inicializar memoria");
+				}
 
 				paquete = malloc(sizeof(int));//realloc?
 				//Le contesto a CPU
@@ -315,17 +327,18 @@ void admDeMemoria(){
 			case LEERMEMORIA:{
 				int pid, pagina, tamanioPaquete, verificador, tlbHit=0;
 				char *paquete;
-				//void* contenido = calloc(1,tamanioMarco);
+
 				void* contenido = calloc(1,tamanioMarco);
 				if(contenido == NULL)
 					log_info(archivoLog,"Error en el malloc");
-				//memset(contenido,0,tamanioMarco);
 
 				log_info(archivoLog, "Empieza leer memoria.");
 				recibirYDeserializarInt(&pid, clienteCPU);
 				log_info(archivoLog, "Recibí pid: %i",pid);
 				recibirYDeserializarInt(&pagina, clienteCPU);
 				log_info(archivoLog, "Recibí página: %i",pagina);
+
+				log_info(archivoLogObligatorio,"Solicitud de leer memoria recibida. Pid: %i, página: %i",pid,pagina);
 
 				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYLeer(pid,pagina,contenido);
@@ -367,6 +380,8 @@ void admDeMemoria(){
 				log_info(archivoLog, "Recibí página: %i",pagina);
 				recibirYDeserializarChar(&contenido,clienteCPU);
 				log_info(archivoLog, "Recibí contenido: %s",contenido);
+
+				log_info(archivoLogObligatorio,"Solicitud de escribir memoria recibida. Pid: %i, página: %i",pid,pagina);
 
 				if (tlbHabilitada()){
 					tlbHit = buscarEnTLBYEscribir(pid,pagina,contenido);
@@ -463,6 +478,11 @@ void iniciarProceso(int pid, int cantPaginas){
 		dictionary_put(nuevaTablaDePaginas,string_itoa(nroPagina),nuevoProceso);
 	}
 	dictionary_put(tablaDeProcesos,string_itoa(pid),nuevaTablaDePaginas);
+
+	accesos_t* nuevoAcceso = malloc(sizeof(accesos_t));
+	nuevoAcceso->accesosAPaginas=0;
+	nuevoAcceso->fallosDePaginas=0;
+	dictionary_put(tablaDeProcesosAccesos,string_itoa(pid),nuevoAcceso);
 }
 
 int finalizarProceso(int pid){
@@ -474,6 +494,9 @@ int finalizarProceso(int pid){
 		t_list* punteroClockMejorado = dictionary_remove(tablaDeProcesosCM,string_itoa(pid));
 		list_destroy(punteroClockMejorado);
 	}
+	accesos_t *accesos = dictionary_remove(tablaDeProcesosAccesos,string_itoa(pid));//TODO imprimir
+	log_info(archivoLogObligatorio,"Proceso mProc finalizado con %i PF, y %i accesos a paginas.",accesos->fallosDePaginas,accesos->accesosAPaginas);
+	free(accesos);
 	dictionary_remove_and_destroy(tablaDeProcesos,string_itoa(pid),(void*)tablaDePaginasDestroy);
 	return 1;//o -1 en error
 }
@@ -482,8 +505,11 @@ int leerMemoria(int pid, int pagina, void*contenido){
 	int success;
 	t_dictionary *tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	pagina_t *paginaALeer = dictionary_get(tablaDePaginas, string_itoa(pagina));
+	accesos_t *accesos=dictionary_get(tablaDeProcesosAccesos, string_itoa(pid));
+	accesos->accesosAPaginas++;
 	usleep(retardoMemoria);
 	if (paginaALeer->bitPresencia==0){//fallo de pagina
+		log_info(archivoLogObligatorio,"Fallo de página, pid: %i",pid);
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso && hayMarcoLibre()){//asigna un nuevo marco
 					paginaALeer->nroMarco = asignarNuevoMarco();
 					if(algoritmoDeReemplazo==CLOCKMEJORADO){
@@ -501,6 +527,7 @@ int leerMemoria(int pid, int pagina, void*contenido){
 			log_info(archivoLogPrueba,"PF de pagina: %i",pagina);
 			int paginaAReemplazar= paginaAReemplazarPorAlgoritmo(tablaDePaginas);
 			log_info(archivoLogPrueba,"pagina a reemplazar: %i",paginaAReemplazar);
+			log_info(archivoLogObligatorio,"Encontrada victima para reemplazo, pagina: %i",paginaAReemplazar);
 			pagina_t *victima = dictionary_get(tablaDePaginas,string_itoa(paginaAReemplazar));
 			paginaALeer->nroMarco=victima->nroMarco;
 			victima->bitPresencia=0;
@@ -529,12 +556,16 @@ int leerMemoria(int pid, int pagina, void*contenido){
 		success = leerDeSwap(pid,pagina,contenido);
 		log_info(archivoLog,"Contenido de swap es: %s",contenido);
 		memcpy(memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,contenido,tamanioMarco);
+		accesos->fallosDePaginas++;
+
 		usleep(retardoMemoria);
 
 	}else{
 		memcpy(contenido,memoriaPrincipal+paginaALeer->nroMarco*tamanioMarco,tamanioMarco);
 		usleep(retardoMemoria);
 	}
+	log_info(archivoLogObligatorio,"Acceso a memoria realizado para pid: %i, página: %i, marco: %i",pid,pagina,paginaALeer->nroMarco);
+
 	//paginaALeer->bitModificado=0;
 	paginaALeer->bitPresencia=1;
 	paginaALeer->tiempoLRU=1;
@@ -554,9 +585,12 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 	void *marcoAEscribir = calloc(1,tamanioMarco);
 	t_dictionary *tablaDePaginas = dictionary_get(tablaDeProcesos,string_itoa(pid));
 	pagina_t *paginaAEscribir = dictionary_get(tablaDePaginas, string_itoa(pagina));
+	accesos_t *accesos=dictionary_get(tablaDeProcesosAccesos, string_itoa(pid));
+	accesos->accesosAPaginas++;
 	usleep(retardoMemoria);
 	log_info(archivoLog,"Terminó de obtener la pagina y el marco es: %i\n",paginaAEscribir->nroMarco);
 	if (paginaAEscribir->bitPresencia==0){//fallo de pagina
+		log_info(archivoLogObligatorio,"Fallo de página, pid: %i",pid);
 		if(cantidadMarcosAsignados(tablaDePaginas)<maximoMarcosPorProceso && hayMarcoLibre()){//asigna un nuevo marco
 			paginaAEscribir->nroMarco = asignarNuevoMarco();
 			log_info(archivoLog,"Terminó de asignar marco nuevo: %i\n",paginaAEscribir->nroMarco);
@@ -576,6 +610,7 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 			int paginaAReemplazar = paginaAReemplazarPorAlgoritmo(tablaDePaginas);
 			log_info(archivoLogPrueba,"pagina a reemplazar: %i",paginaAReemplazar);
 			log_info(archivoLog,"Encontrada victima para reemplazo, pagina: %i",paginaAReemplazar);
+			log_info(archivoLogObligatorio,"Encontrada victima para reemplazo, pagina: %i",paginaAReemplazar);
 			pagina_t *victima = dictionary_get(tablaDePaginas,string_itoa(paginaAReemplazar));
 			usleep(retardoMemoria);
 			paginaAEscribir->nroMarco=victima->nroMarco;
@@ -607,12 +642,16 @@ int escribirMemoria(int pid, int pagina, void* contenido){
 		success = leerDeSwap(pid,pagina,contenidoDeSwap);
 		log_info(archivoLog,"Contenido de swap es: %s",contenidoDeSwap);
 		memcpy(memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,contenidoDeSwap,tamanioMarco);
+
+		accesos->fallosDePaginas++;
 		usleep(retardoMemoria);//escribir en memoria
 		free(contenidoDeSwap);
 	}
 
 	memcpy(marcoAEscribir,contenido,strlen(contenido));//tamanioContenido
 	memcpy(memoriaPrincipal+paginaAEscribir->nroMarco*tamanioMarco,marcoAEscribir,tamanioMarco);
+
+	log_info(archivoLogObligatorio,"Acceso a memoria realizado para pid: %i, página: %i, marco: %i",pid,pagina,paginaAEscribir->nroMarco);
 
 	usleep(retardoMemoria);
 
@@ -740,27 +779,34 @@ int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
 		punteroClockMejorado = dictionary_get(tablaDeProcesosCM,string_itoa(aux->pid));
 		pagina_t *a = list_get(punteroClockMejorado,0);
 		log_info(archivoLogPrueba,"El puntero apunta a la pagina: %i con U: %i y M: %i",a->nroPagina,a->bitUso,a->bitModificado);
+		log_info(archivoLogObligatorio,"El puntero al empezar el algoritmo de reemplazo apunta a la pagina: %i con U: %i y M: %i",a->nroPagina,a->bitUso,a->bitModificado);
 	}
 	switch(algoritmoDeReemplazo){
 	case FIFO:
+		log_info(archivoLogObligatorio,"Imprimiendo páginas en memoria para algoritmo FIFO.");
 		while(i<dictionary_size(tablaDePaginas)){
 			pagina_t* aux= dictionary_get(tablaDePaginas,string_itoa(i));
-			if(aux->bitPresencia==1)
+			if(aux->bitPresencia==1){
+				log_info(archivoLogObligatorio,"Página: %i tiempo FIFO de: %i .",aux->tiempoFIFO);
 				if(aux->tiempoFIFO>tiempoMaximo){
 					tiempoMaximo=aux->tiempoFIFO;
 					paginaAReemplazar=i;
 				}
+			}
 			i++;
 		}
 		break;
 	case LRU:
+		log_info(archivoLogObligatorio,"Imprimiendo páginas en memoria para algoritmo LRU.");
 		while(i<dictionary_size(tablaDePaginas)){
 			pagina_t* aux= dictionary_get(tablaDePaginas,string_itoa(i));
-			if(aux->bitPresencia==1)
+			if(aux->bitPresencia==1){
+				log_info(archivoLogObligatorio,"Página: %i tiempo LRU de: %i .",aux->tiempoLRU);
 				if(aux->tiempoLRU>tiempoMaximo){
 					tiempoMaximo=aux->tiempoLRU;
 					paginaAReemplazar=i;
 				}
+			}
 			i++;
 		}
 		break;
@@ -787,6 +833,9 @@ int paginaAReemplazarPorAlgoritmo(t_dictionary *tablaDePaginas){
 				i++;
 			}
 		}
+		pagina_t *a = list_get(punteroClockMejorado,0);
+		log_info(archivoLogObligatorio,"El puntero al finalizar el algoritmo de reemplazo apunta a la pagina: %i con U: %i y M: %i",a->nroPagina,a->bitUso,a->bitModificado);
+
 		break;
 	}
 	return paginaAReemplazar;
@@ -811,10 +860,13 @@ int buscarEnTLBYEscribir(int pid,int pagina,char* contenido){
 			tlbHit =1;
 			aciertosTLB++;
 			log_info(archivoLog,"TLB hit para escritura de pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
+			log_info(archivoLogObligatorio,"TLB hit para escritura de pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 			memcpy(paginaAEscribir,contenido,strlen(contenido));//tamanioContenido
 			memcpy(memoriaPrincipal+marcoTLB*tamanioMarco,paginaAEscribir,tamanioMarco);
 			t_dictionary* tablaAux = dictionary_get(tablaDeProcesos,string_itoa(pid));
 			pagina_t *paginaAux = dictionary_get(tablaAux,string_itoa(pagina));
+			accesos_t *accesos=dictionary_get(tablaDeProcesosAccesos, string_itoa(pid));
+			accesos->accesosAPaginas++;
 			paginaAux->bitModificado=1;
 			paginaAux->bitUso=1;
 			paginaAux->tiempoLRU=0;
@@ -840,9 +892,12 @@ int buscarEnTLBYLeer(int pid,int pagina,char* contenido){
 			tlbHit =1;
 			aciertosTLB++;
 			log_info(archivoLog,"TLB hit para lectura de pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
+			log_info(archivoLogObligatorio,"TLB hit para lectura de pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 			memcpy(contenido,memoriaPrincipal+marcoTLB*tamanioMarco,tamanioMarco);
 			t_dictionary* tablaAux = dictionary_get(tablaDeProcesos,string_itoa(pid));
 			pagina_t *paginaAux = dictionary_get(tablaAux,string_itoa(pagina));
+			accesos_t *accesos=dictionary_get(tablaDeProcesosAccesos, string_itoa(pid));
+			accesos->accesosAPaginas++;
 			paginaAux->bitUso=1;
 			paginaAux->tiempoLRU=0;
 			//paginaAEscribir->tiempoFIFO=1;
@@ -871,6 +926,7 @@ int eliminarEntradaEnTLB(int pid, int pagina){
 	if (tlbHit){
 		entradaTLB_t *aux = list_remove(tlb,pos);
 		log_info(archivoLog,"Eliminada entrada en TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
+		log_info(archivoLogObligatorio,"Eliminada entrada en TLB para pid: %i, pagina: %i, marco: %i",pid,pagina,marcoTLB);
 		free(aux);
 	}
 	pthread_mutex_unlock(&mutexAccesoTLB);
@@ -894,9 +950,12 @@ void agregarEntradaEnTLB(int pid, int pagina, int marco){
 		pthread_mutex_unlock(&mutexAccesoTLB);
 		log_info(archivoLog,"Reemplazo una entrada en la TLB");
 		log_info(archivoLog,"Elimino la entrada pid: %i, página: %i, marco: %i",aux->pid,aux->pagina,aux->marco);
+		log_info(archivoLogObligatorio,"Reemplazo una entrada en la TLB");
+		log_info(archivoLogObligatorio,"Elimino la entrada pid: %i, página: %i, marco: %i",aux->pid,aux->pagina,aux->marco);
 		free(aux);
 	}
 	log_info(archivoLog,"Agrego una nueva entrada en la TLB pid: %i, página: %i, marco: %i",nuevaEntrada->pid, nuevaEntrada->pagina, nuevaEntrada->marco);
+	log_info(archivoLogObligatorio,"Agrego una nueva entrada en la TLB pid: %i, página: %i, marco: %i",nuevaEntrada->pid, nuevaEntrada->pagina, nuevaEntrada->marco);
 	pthread_mutex_lock(&mutexAccesoTLB);
 	list_add(tlb,nuevaEntrada);
 	pthread_mutex_unlock(&mutexAccesoTLB);
@@ -905,15 +964,20 @@ void agregarEntradaEnTLB(int pid, int pagina, int marco){
 void signalHandler (int signal){
 	switch(signal){
 	case SIGUSR1:
+		log_info(archivoLogObligatorio,"Señal SIGUSR1 recibida. Empieza TLB flush.");
 		log_info(archivoLog,"TLB flush");
 		pthread_t hiloTLBFlush;
 		pthread_create(&hiloTLBFlush,NULL,(void*)tlbFlush,NULL);
+		log_info(archivoLogObligatorio,"Tratamiento de señal SIGUSR1 terminado.");
 		break;
 	case SIGUSR2:
+		log_info(archivoLogObligatorio,"Señal SIGUSR2 recibida. Empieza Memory flush. Se mandarán a escribir, de haber, las páginas modificadas a Swap.");
 		log_info(archivoLog,"Memory flush");
 		memoryFlush();
+		log_info(archivoLogObligatorio,"Tratamiento de señal SIGUSR2 terminado.");
 		break;
 	case SIGPOLL:
+		log_info(archivoLogObligatorio,"Señal SIGPOLL recibida. Empieza Memory dump.");
 		log_info(archivoLog,"Memory copy");
 		if (fork()==0){
 			int i;
@@ -922,9 +986,11 @@ void signalHandler (int signal){
 				if(marcos[i]==1){
 					memset(contenido,0,tamanioMarco);
 					memcpy(contenido,memoriaPrincipal+i*tamanioMarco,tamanioMarco);
-					log_info(archivoLogPrueba,"Marco %i, contenido: %s",i,contenido);
+					log_info(archivoLogPrueba,"Marco %i, contenido: %s .",i,contenido);
+					log_info(archivoLogObligatorio,"Marco %i, contenido: %s .",i, contenido);
 				}
 			}
+			log_info(archivoLogObligatorio,"Tratamiento de señal SIGPOLL terminado.");
 			exit(0);
 		}
 
@@ -986,8 +1052,10 @@ void calculoTasaTLB(){
 		if (accesosTLB){
 			tasaAcierto=(100*aciertosTLB)/accesosTLB;
 			log_info(archivoLog,"La tasa de aciertos de la TLB es: %i \% \n",tasaAcierto);
+			log_info(archivoLogObligatorio,"La tasa de aciertos de la TLB es: %i \% \n",tasaAcierto);
 		}else{
 			log_info(archivoLog,"La tasa de aciertos de la TLB es: NA \n");
+			log_info(archivoLogObligatorio,"La tasa de aciertos de la TLB es: NA \n");
 		}
 	}
 }
