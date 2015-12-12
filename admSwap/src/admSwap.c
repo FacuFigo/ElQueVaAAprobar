@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
 
 	//Creo los archivos de logs
 	archivoLog = log_create("log_Obligatorio", "SWAP", 0, LOG_LEVEL_INFO);
-	logDebug = log_create("log_Debug_Swap", "SWAP", 1, LOG_LEVEL_DEBUG);
+	logDebug = log_create("log_Debug_Swap", "SWAP", 0, LOG_LEVEL_DEBUG);
 
 	pthread_mutex_init(&accesoAMemoria, NULL);
 

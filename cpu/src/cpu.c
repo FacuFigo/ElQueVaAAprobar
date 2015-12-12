@@ -79,7 +79,7 @@ void timer_handler(int signum);
 int main(int argc, char** argv) {
 
 	//Creo el archivo de logs
-	logObligatorio = log_create("log_cpu_Obligatorio", "cpu", 1,
+	logObligatorio = log_create("log_cpu_Obligatorio", "cpu", 0,
 			LOG_LEVEL_TRACE);
 
 	archivoLog = log_create("log_CPU", "CPU", 0, 0);
