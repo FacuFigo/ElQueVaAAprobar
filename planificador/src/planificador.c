@@ -4,7 +4,7 @@
  Author      :
  Version     :
  Copyright   : Your copyright notice
- Description : Hello World in C, Ansi-style
+ Description : Planificador Cache13
  ============================================================================
  */
 
@@ -151,6 +151,7 @@ void procesoCorriendo(procesoCorriendo_t* proceso);
 void logueoEstados(t_queue* cola);
 void logueoEstadosBlock(t_queue* cola);
 void matarProceso(pcb_t* pcb);
+void initPCB(pcb_t* pcb);
 
 int main(int argc, char** argv) {
 
@@ -208,7 +209,7 @@ int main(int argc, char** argv) {
 void configurarPlanificador(char* config) {
 
 	t_config* configPlanificador = config_create(config);
-
+	
 	if (config_has_property(configPlanificador, "PUERTO_ESCUCHA"))
 		puertoEscucha = config_get_int_value(configPlanificador, "PUERTO_ESCUCHA");
 	if (config_has_property(configPlanificador, "ALGORITMO_PLANIFICACION"))
@@ -252,7 +253,7 @@ void manejoDeConsola() {
 	while (mantenerConsola) {
 
 		comando_t comando;
-
+		
 		comando.comando = malloc(10);
 		comando.parametro = malloc(100);
 
@@ -316,9 +317,9 @@ void correrProceso(char* path) {
 	log_debug(archivoLogDebug, "Se genero el PCB del proceso %i.", pcb->processID);
 }
 
-void generarPCB(pcb_t* pcb){
+void initPCB(pcb_t* pcb){
 
-	pcb->flagFinalizar = 0;
+		pcb->flagFinalizar = 0;
 	pcb->processID = pIDContador;
 	pcb->programCounter = 0;
 	//El estado se asigna a Ready
@@ -333,6 +334,11 @@ void generarPCB(pcb_t* pcb){
 	pcb->tiempoInicioRespuesta = 0;
 	pcb->tiempoFinRespuesta = 0;
 	pcb->tiempoRespuesta = 0;
+	
+}
+void generarPCB(pcb_t* pcb){
+
+	initPCB(pcb);
 
 	pIDContador++;
 
